@@ -1,0 +1,17 @@
+# Estado y respaldo de TU TV (IP, paquetes): nunca se suben
+state/
+.tv-ip
+
+# Salidas de compilación
+launcher/build/
+dist/
+*.apk
+*.idsig
+
+# Llaves de firma
+*.keystore
+*.jks
+
+# Sistema
+.DS_Store
+Thumbs.db

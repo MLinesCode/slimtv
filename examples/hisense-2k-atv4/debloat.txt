@@ -1,0 +1,40 @@
+# SlimTV · Lista de limpieza para Hisense HiSmart 2K ATV4 (Android TV 11, ~900 MB de RAM)
+# Probada el 2026-10-19. Plataforma MediaTek/CVTE: probablemente sirve para otros Hisense
+# y TVs con la misma base (revisa con scripts/debloat.ps1 -DryRun antes de aplicar).
+#
+# Uso:  pwsh scripts/debloat.ps1 -List examples/hisense-2k-atv4/debloat.txt
+# El launcher de Google NO va aquí: lo desactiva scripts/install.ps1 después de comprobar SlimTV.
+
+# --- Publicidad y recomendaciones ---
+com.google.android.tvrecommendations        # Recomendaciones y anuncios del inicio (~19 MB)
+com.google.android.backdrop                 # Protector de pantalla "Ambient" (pesado)
+
+# --- Fábrica / tienda ---
+fusion.android.tv.demo                      # Modo demostración de tienda
+com.tikilive.live                           # TikiLive preinstalada
+com.cvte.tv.hisenseproductregister          # Registro de producto Hisense
+com.hisenseproductregister.fte              # Registro de producto Hisense (primer uso)
+
+# --- Google sin uso habitual ---
+com.google.android.feedback                 # Envío de reportes a Google
+com.google.android.play.games               # Google Play Juegos
+com.google.android.onetimeinitializer       # Solo se usa en la configuración inicial
+
+# --- Sistema sin uso en una TV ---
+com.android.printspooler                    # Impresión
+com.android.dynsystem                       # Actualizaciones de sistema dinámicas (desarrolladores)
+com.android.hotspot2.osulogin               # Login de hotspots Passpoint
+
+# --- Opcionales: quita el # si NO los usas ---
+# com.google.android.youtube.tvmusic        # YouTube Music
+# com.google.android.marvin.talkback        # Lector de pantalla (accesibilidad)
+# com.amazon.amazonvideo.livingroom         # Prime Video
+# com.google.android.katniss                # Asistente de Google / búsqueda por voz (~25-40 MB)
+# com.google.android.apps.mediashell        # Chromecast integrado (~20 MB)
+
+# --- NO TOCAR en este modelo ---
+# com.mediatek.*            sintonizador, entradas HDMI, servicio de TV
+# com.cvte.tv.at            base de la TV
+# com.cvte.autobacklight    brillo automático
+# com.airoha.android.btd    control remoto Bluetooth
+# com.cvte.fac.menu, mediatek.factorymenu.ui, com.at.factory.*  menús de fábrica

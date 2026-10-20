@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Personaliza SlimTV aquí y recompila con:  pwsh scripts/build.ps1 -Install
+  Para saber el paquete de una app:          pwsh scripts/diagnose.ps1
+-->
+<resources>
+    <!-- Apps de la barra principal, en orden. Las que no estén instaladas se ignoran. -->
+    <string-array name="dock_apps">
+        <item>com.netflix.ninja</item>
+        <item>com.crunchyroll.crunchyroid</item>
+        <item>com.google.android.youtube.tv</item>
+        <item>com.amazon.amazonvideo.livingroom</item>
+        <item>com.wbd.stream</item>
+        <!-- Otros comunes:
+             com.disney.disneyplus          Disney+
+             com.spotify.tv.android         Spotify
+             com.apple.atve.androidtv.appletv  Apple TV
+             com.plexapp.android            Plex
+             org.videolan.vlc               VLC -->
+    </string-array>
+
+    <!-- Apps que no aparecen en la cuadrícula ("Ajustes" ya tiene su botón arriba). -->
+    <string-array name="hidden_apps">
+        <item>com.android.tv.settings</item>
+    </string-array>
+
+    <!-- Máximo de apps en la barra: 5 caben bien en pantallas de 720p. -->
+    <integer name="dock_max">5</integer>
+    <integer name="grid_columns">6</integer>
+
+    <!-- Minutos entre cambios de fondo. -->
+    <integer name="wallpaper_minutes">10</integer>
+</resources>

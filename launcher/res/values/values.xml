@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SlimTV</string>
+
+    <style name="Theme.SlimTV" parent="android:Theme.DeviceDefault.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:windowShowWallpaper">false</item>
+        <item name="android:windowDisablePreview">true</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
+</resources>

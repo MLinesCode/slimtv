@@ -1,0 +1,53 @@
+# Compila el launcher en cada push/PR y, al crear un tag v*, publica dist/slimtv.apk en Releases.
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Instalar build-tools y plataforma
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;35.0.0" "platforms;android-35"
+
+      - name: Compilar
+        shell: pwsh
+        env:
+          SLIMTV_KEYSTORE_B64: ${{ secrets.SLIMTV_KEYSTORE_B64 }}
+          SLIMTV_KEYSTORE_PASS: ${{ secrets.SLIMTV_KEYSTORE_PASS }}
+          SLIMTV_KEY_ALIAS: ${{ secrets.SLIMTV_KEY_ALIAS }}
+        run: |
+          if ($env:SLIMTV_KEYSTORE_B64) {
+            $ks = Join-Path $env:RUNNER_TEMP "release.jks"
+            [IO.File]::WriteAllBytes($ks, [Convert]::FromBase64String($env:SLIMTV_KEYSTORE_B64))
+            $env:SLIMTV_KEYSTORE = $ks
+          }
+          ./scripts/build.ps1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: slimtv-apk
+          path: dist/slimtv.apk
+
+      - name: Publicar release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/slimtv.apk
+          generate_release_notes: true
