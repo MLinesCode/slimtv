@@ -31,11 +31,15 @@ slimtv/
 │   └── restore.ps1                 ← deshacer todo
 ├── launcher/                       ← código del launcher (io.github.mlinescode.slimtv)
 │   ├── AndroidManifest.xml         ← actividad HOME + <queries> para Android 11
-│   ├── res/values/config.xml       ← barra, ocultas, columnas, minutos del fondo
+│   ├── res/values/config.xml       ← favoritas, ocultas, apps de música, columnas, minutos
 │   ├── res/drawable/               ← íconos vectoriales y banner
 │   └── src/io/github/mlinescode/slimtv/
-│       ├── MainActivity.java       ← UI construida en código: reloj, botones, barra, cuadrícula
-│       └── WallpaperView.java      ← paisajes generados por código con fundido
+│       ├── MainActivity.java       ← UI en código: reloj, barra de vidrio, tarjeta, mini reproductor, menú
+│       ├── WallpaperView.java      ← paisajes por código + copia desenfocada de 160×90 para el vidrio
+│       ├── GlassDrawable.java      ← vidrio esmerilado sin desenfoque en vivo (recorta esa copia)
+│       ├── MediaWatcher.java       ← observa las sesiones de reproducción ("lector de notificaciones")
+│       ├── NowPlaying.java         ← guarda lo último que reprodujo cada app y sus portadas
+│       └── Screensaver.java        ← protector de pantalla (DreamService)
 ├── state/   (ignorado por git)     ← respaldo y registro de cambios por TV
 └── dist/    (ignorado por git)     ← slimtv.apk compilado
 ```
@@ -86,7 +90,7 @@ SlimTV
 │   │   ├── javac -source 11          → .class
 │   │   ├── d8 --min-api 26           → classes.dex (se agrega al APK con System.IO.Compression)
 │   │   ├── zipalign -p 4
-│   │   └── apksigner                 → dist/slimtv.apk (~30 KB)
+│   │   └── apksigner                 → dist/slimtv.apk (~60 KB)
 │   └── Revisión visual con adb shell screencap + input keyevent DPAD_*
 │
 ├── FASE 6 · Reemplazar el launcher                      → scripts/install.ps1

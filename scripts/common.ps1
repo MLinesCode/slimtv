@@ -88,6 +88,16 @@ function Add-Unique([string]$File, [string[]]$Items) {
     if ($new) { Add-Content -Path $File -Value $new }
 }
 
+# Apps de música del mini reproductor (launcher/res/values/config.xml). Deben poder sonar en
+# segundo plano: con RUN_ANY_IN_BACKGROUND restringido, Spotify se corta al salir de la app.
+function Get-MusicApps {
+    $config = Join-Path $Root "launcher/res/values/config.xml"
+    if (-not (Test-Path $config)) { return @() }
+    $xml = [xml](Get-Content $config -Raw)
+    return @($xml.resources.'string-array' | Where-Object { $_.name -eq "music_apps" } |
+        ForEach-Object { $_.item } | Where-Object { $_ })
+}
+
 function Get-MemAvailableMB([string]$Device) {
     $line = Invoke-Tv $Device shell "grep MemAvailable /proc/meminfo"
     if ("$line" -match "(\d+)") { return [math]::Round([int64]$Matches[1] / 1024) }

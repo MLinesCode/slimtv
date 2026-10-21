@@ -41,6 +41,7 @@ Sigue estas fases y detente a preguntarme en cada punto marcado con [PREGUNTA]:
 5. SEGUNDO PLANO Y AJUSTES
    - Reinicia la TV (adb reboot), espera a que arranque y revisa qué apps se cargaron solas.
    - [PREGUNTA] Propón restringirlas con scripts/restrict-background.ps1.
+     (El script respeta las apps de música de config.xml, como Spotify: si las restringes, se cortan al salir.)
    - Corre scripts/tweaks.ps1 para las animaciones.
 
 6. VERIFICACIÓN Y REPORTE

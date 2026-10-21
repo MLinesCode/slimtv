@@ -33,3 +33,15 @@ pwsh scripts/restrict-background.ps1
 - **`setupwraith`** tiene que desactivarse: si no, se queda con el botón Home.
 - **Cuidado:** al reiniciar, Netflix, Mercado Play y HBO Max se cargaban solas. `restrict-background.ps1`
   fue el cambio que más RAM liberó.
+- **Spotify no se restringe:** con `RUN_ANY_IN_BACKGROUND ignore` la música se corta al salir de la app
+  (en el registro aparece `startForegroundService() did not then call startForeground()`).
+  `restrict-background.ps1` ya la salta porque está en `music_apps` de `config.xml`.
+- **Protector de pantalla:** el de fábrica es `com.google.android.backdrop/.Backdrop`. Si lo desactivas con la
+  lista, la pantalla solo se apaga a los 5 min; `install.ps1` pone en su lugar el protector de SlimTV.
+- **"Seguías viendo":** Watch Next de Android TV no sirve en un launcher propio (Android 11 solo deja leerlo al
+  de Google, permiso privilegiado `ACCESS_ALL_EPG_DATA`). SlimTV usa las sesiones de reproducción:
+  Crunchyroll publica episodio, minuto y duración; YouTube, video y canal; Spotify, canción y carátula.
+  Netflix y Prime Video no publican el título.
+- **YouTube Music:** la app propia de esta TV solo abre YouTube, que se pausa al salir. Por eso no está en `music_apps`.
+- **GPU:** un degradado radial grande detrás de la barra costaba ~15 ms por cuadro (bajaba a ~45 fps).
+  El vidrio con la copia desenfocada de 160×90 no cuesta nada medible.

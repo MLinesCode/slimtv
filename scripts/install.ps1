@@ -3,6 +3,8 @@
   Instala SlimTV, lo pone como pantalla de inicio y desactiva el launcher de fábrica.
 .DESCRIPTION
   Antes de desactivar el launcher original comprueba que SlimTV abre bien.
+  También le da el permiso de uso de apps (barra por uso reciente), el de sesiones de reproducción
+  ("Seguías viendo" y mini reproductor) y lo elige como protector de pantalla.
   -KeepStockLauncher deja el launcher de fábrica activo (útil para probar).
 .EXAMPLE
   pwsh scripts/install.ps1
@@ -54,6 +56,26 @@ if (-not $KeepStockLauncher) {
     }
     Add-Unique (Join-Path $dir "disabled.txt") $done
 }
+
+# Permisos especiales que no se piden en pantalla (todo reversible; restore.ps1 los quita al desinstalar).
+Invoke-Tv $dev shell appops set $pkg GET_USAGE_STATS allow | Out-Null
+Write-Host "  [permiso] uso de apps: la barra se ordena por lo que usas"
+$r = Invoke-Tv $dev shell cmd notification allow_listener "$pkg/$pkg.MediaWatcher"
+if ("$r" -match "rror|nknown|xception") {
+    Write-Host "  [aviso] no pude activar 'Seguías viendo' por ADB ($r)." -ForegroundColor Yellow
+    Write-Host "          Actívalo en Ajustes > Apps > Acceso especial > Acceso a notificaciones > SlimTV."
+} else {
+    Write-Host "  [permiso] sesiones de reproducción: 'Seguías viendo' y mini reproductor (no lee notificaciones)"
+}
+
+# Protector de pantalla: se guarda el original una sola vez para que restore.ps1 lo devuelva.
+$saverFile = Join-Path $dir "screensaver.txt"
+if (-not (Test-Path $saverFile)) {
+    $prev = (Invoke-Tv $dev shell settings get secure screensaver_components | Select-Object -Last 1)
+    Set-Content -Path $saverFile -Value "$prev".Trim()
+}
+Invoke-Tv $dev shell "settings put secure screensaver_components $pkg/.Screensaver; settings put secure screensaver_enabled 1" | Out-Null
+Write-Host "  [protector] SlimTV · Paisajes (antes: $((Get-Content $saverFile -Raw).Trim()))"
 
 Invoke-Tv $dev shell cmd package set-home-activity $activity | Out-Null
 Invoke-Tv $dev shell am force-stop com.android.tv.settings | Out-Null

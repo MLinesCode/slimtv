@@ -32,13 +32,25 @@ if (Test-Path $bg) {
 Invoke-Tv $dev shell "settings put global window_animation_scale 1.0; settings put global transition_animation_scale 1.0; settings put global animator_duration_scale 1.0" | Out-Null
 Write-Host "  [animaciones] 1.0"
 
+$saver = Join-Path $dir "screensaver.txt"
+if (-not $KeepLauncher -and (Test-Path $saver)) {
+    $prev = (Get-Content $saver -Raw).Trim()
+    if ($prev -and $prev -ne "null") {
+        Invoke-Tv $dev shell settings put secure screensaver_components $prev | Out-Null
+    } else {
+        Invoke-Tv $dev shell settings delete secure screensaver_components | Out-Null
+    }
+    Write-Host "  [protector] $prev"
+}
+
 if (-not $KeepLauncher) {
     Invoke-Tv $dev shell pm uninstall io.github.mlinescode.slimtv | Out-Null
     Write-Host "  [desinstalado] SlimTV"
 }
 
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-foreach ($f in $disabled, $bg) { if (Test-Path $f) { Rename-Item $f "$(Split-Path $f -Leaf).restored-$stamp" } }
+if ($KeepLauncher) { $saver = $null }
+foreach ($f in $disabled, $bg, $saver) { if ($f -and (Test-Path $f)) { Rename-Item $f "$(Split-Path $f -Leaf).restored-$stamp" } }
 Invoke-Tv $dev shell input keyevent HOME | Out-Null
 Write-Host ""
 Write-Host "Listo: la TV quedó como venía de fábrica (el respaldo original sigue en state/)." -ForegroundColor Green

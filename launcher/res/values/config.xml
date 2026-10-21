@@ -4,8 +4,10 @@
   Para saber el paquete de una app:          pwsh scripts/diagnose.ps1
 -->
 <resources>
-    <!-- Apps de la barra principal, en orden. Las que no estén instaladas se ignoran. -->
-    <string-array name="dock_apps">
+    <!-- Favoritas: llenan la barra, en este orden, mientras no haya historial de uso.
+         Después la barra se ordena sola por uso reciente (y por las que fijes con OK sostenido).
+         Las que no estén instaladas se ignoran. -->
+    <string-array name="favorite_apps">
         <item>com.netflix.ninja</item>
         <item>com.crunchyroll.crunchyroid</item>
         <item>com.google.android.youtube.tv</item>
@@ -19,15 +21,23 @@
              org.videolan.vlc               VLC -->
     </string-array>
 
-    <!-- Apps que no aparecen en la cuadrícula ("Ajustes" ya tiene su botón arriba). -->
+    <!-- Apps que no aparecen en ningún lado ("Ajustes" ya tiene su botón arriba). -->
     <string-array name="hidden_apps">
         <item>com.android.tv.settings</item>
     </string-array>
 
-    <!-- Máximo de apps en la barra: 5 caben bien en pantallas de 720p. -->
-    <integer name="dock_max">5</integer>
+    <!-- Apps de música que controla el mini reproductor. Necesitan poder sonar en segundo plano:
+         restrict-background.ps1 no las restringe. (YouTube Music en TV abre YouTube, que se
+         pausa al salir, así que no sirve aquí.) -->
+    <string-array name="music_apps">
+        <item>com.spotify.tv.android</item>
+    </string-array>
+
+    <!-- Máximo de apps en la barra (se desplaza); el resto está en "Todas las apps". -->
+    <integer name="row_max">10</integer>
     <integer name="grid_columns">6</integer>
 
-    <!-- Minutos entre cambios de fondo. -->
+    <!-- Minutos entre cambios de fondo en el inicio y en el protector de pantalla. -->
     <integer name="wallpaper_minutes">10</integer>
+    <integer name="screensaver_minutes">5</integer>
 </resources>

@@ -5,7 +5,8 @@
 .DESCRIPTION
   Usa el permiso RUN_ANY_IN_BACKGROUND de Android (appops). En TVs de 1 GB es el cambio
   que más RAM libera: Netflix, HBO Max y similares se cargan solas al arrancar.
-  Sin -List, aplica a TODAS las apps instaladas por el usuario.
+  Sin -List, aplica a TODAS las apps instaladas por el usuario, menos las apps de música del
+  mini reproductor (music_apps en config.xml), que necesitan sonar en segundo plano.
 .EXAMPLE
   pwsh scripts/restrict-background.ps1
   pwsh scripts/restrict-background.ps1 -List examples/hisense-2k-atv4/background.txt
@@ -21,10 +22,15 @@ $installed = Invoke-Tv $dev shell pm list packages | ForEach-Object { $_ -replac
 if ($List) { $pkgs = Read-PackageList $List }
 else { $pkgs = Invoke-Tv $dev shell pm list packages -3 | ForEach-Object { $_ -replace "^package:", "" } }
 
+$music = Get-MusicApps
 $before = Get-MemAvailableMB $dev
 $done = @()
 foreach ($p in $pkgs) {
     if ($installed -notcontains $p -or $Protected -contains $p) { continue }
+    if ($music -contains $p) {
+        Write-Host "  [se respeta] $p  (app de música: debe poder sonar al salir de ella)" -ForegroundColor Yellow
+        continue
+    }
     Invoke-Tv $dev shell cmd appops set $p RUN_ANY_IN_BACKGROUND ignore | Out-Null
     Invoke-Tv $dev shell am force-stop $p | Out-Null
     Write-Host "  [sin segundo plano] $p" -ForegroundColor Green

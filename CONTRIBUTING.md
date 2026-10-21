@@ -22,8 +22,11 @@ le ahorra horas a la siguiente persona con la misma TV.
 - Nunca agregues paquetes de la lista `$Protected` de [`scripts/common.ps1`](scripts/common.ps1).
 
 ## Código
-- **Launcher:** Java puro, sin dependencias. Antes de agregar algo, piensa en cuánta RAM cuesta:
-  el objetivo es seguir por debajo de ~25 MB en uso y ~50 KB de APK.
+- **Launcher:** Java puro, sin dependencias y sin internet. Antes de agregar algo, piensa en cuánta RAM
+  y GPU cuesta: el objetivo es seguir en ~5 ms por cuadro navegando y por debajo de ~80 KB de APK.
+  Mídelo con `adb shell dumpsys gfxinfo io.github.mlinescode.slimtv` (antes y después) y ponlo en el PR.
+- **Nada que se redibuje cuadro por cuadro:** en TVs de 1 GB la GPU es lo que se satura. Anima solo
+  escala, posición u opacidad; nada de degradados grandes animados ni desenfoque en vivo.
 - **Scripts:** deben funcionar en Windows PowerShell 5.1 y en `pwsh` 7 (Windows/Mac/Linux).
   Guárdalos en UTF-8 con BOM para que los acentos se vean bien en 5.1.
 - Prueba en una TV real antes de abrir el PR y cuenta en él qué probaste.

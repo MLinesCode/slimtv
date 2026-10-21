@@ -3,7 +3,7 @@
 # SlimTV
 
 **Revive tu Android TV de 1 GB de RAM.**
-Limpieza reversible + un launcher de 30 KB que usa 20 MB de RAM.
+Limpieza reversible + un launcher de 60 KB con efecto vidrio que corre a 60 fps en 1 GB de RAM.
 
 [English](README.en.md) · [Proceso completo](docs/PROCESO.md) · [Cómo se hizo con IA](docs/IA.md) · [Agregar tu modelo](CONTRIBUTING.md)
 
@@ -33,7 +33,8 @@ para hacer cuatro cosas, **todas reversibles**:
 2. **Bloquear el arranque en segundo plano:** que Netflix, HBO Max & co. no se carguen solas al encender.
    *En TVs de 1 GB, esto es lo que más RAM libera.*
 3. **Reemplazar el launcher** por uno propio, ultraligero: reloj, accesos a Entradas/Wi-Fi/Ajustes,
-   una barra con tus apps favoritas y fondos de paisajes generados por código.
+   una barra de vidrio con tus apps ordenadas por uso, "Seguías viendo", mini reproductor de Spotify
+   y un protector de pantalla con paisajes generados por código.
 4. **Acelerar las animaciones** del sistema.
 
 ## Resultados (Hisense HiSmart 2K ATV4, 903 MB de RAM)
@@ -42,16 +43,31 @@ para hacer cuatro cosas, **todas reversibles**:
 |---|---|---|
 | RAM disponible | ~265 MB | **~393 MB** (+48 %) |
 | Memoria del launcher | 115 MB (+31 MB de servicios asociados) | **23 MB** |
-| Tamaño del launcher | — | **29 KB** |
+| Tamaño del launcher | — | **61 KB** (29 KB en la v1.0, sin vidrio ni extras) |
 | Apps cargadas solas al encender | Netflix, HBO Max, Mercado Play… | **Ninguna** |
 
 ## El launcher
 
-- **Arriba:** reloj, saludo y fecha. A la derecha: **Entradas** (HDMI), **Wi-Fi** y **Ajustes**.
-- **Barra:** tus apps favoritas. La seleccionada se agranda y proyecta un brillo con su color.
-- **Flecha abajo:** todas las demás apps.
-- **Fondos:** 6 paisajes dibujados por código, que cambian cada 10 minutos. No usa fotos, así gasta ~1 MB de RAM.
-- **Ligero a propósito:** Java puro, sin AndroidX, sin internet y sin servicios en segundo plano.
+- **Arriba:** reloj, fecha y saludo. A la derecha, en una cápsula de vidrio: **Entradas** (HDMI), **Wi-Fi** y **Ajustes**.
+- **Barra de vidrio:** hasta 10 apps **ordenadas por uso reciente** (al principio, tus favoritas de `config.xml`).
+  La seleccionada se agranda y la barra se tiñe con el color de su marca. Al final, **Todas las apps**.
+- **Seguías viendo:** al seleccionar una app aparece una tarjeta con lo último que reprodujiste, el progreso
+  y cuánto falta. Funciona con las apps que lo publican en su sesión de reproducción (probado: Crunchyroll,
+  YouTube y Spotify; Netflix y Prime Video no lo comparten).
+- **Mini reproductor:** si Spotify suena de fondo, una píldora con carátula, canción y ⏮ ⏯ ⏭.
+- **OK sostenido sobre una app:** menú para abrir, **fijar al principio**, quitar de la barra, olvidar lo
+  último visto, liberar memoria, ver su información o desinstalarla.
+- **Protector de pantalla:** los paisajes a pantalla completa con reloj grande y, solo si hay algo útil,
+  lo que suena, lo último que veías o un aviso de "Sin internet". Se mueve cada 90 s.
+- **Fondos:** 6 paisajes dibujados por código con bruma atmosférica. No usa fotos: ~1 MB de RAM.
+- **Ligero a propósito:** Java puro, sin AndroidX y **sin internet**. El vidrio no desenfoca en vivo
+  (Android 11 no puede): recorta una copia de 160×90 del fondo, así que no cuesta nada por cuadro.
+
+| Rendimiento navegando (Hisense 2K ATV4, `dumpsys gfxinfo`) | v1.0 | v1.1 |
+|---|---|---|
+| Tiempo típico por cuadro | 5 ms | **5 ms** |
+| Cuadros con tirones | 1.4 % | **~3–5 %** |
+| Memoria del launcher (PSS, medida igual en las dos) | ~54 MB | **~39–54 MB** |
 
 ![Todas las apps](docs/img/todas-las-apps.png)
 
@@ -122,16 +138,21 @@ Un **restablecimiento de fábrica** desde Ajustes también deshace todo.
 Edita [`launcher/res/values/config.xml`](launcher/res/values/config.xml) y recompila con `pwsh scripts/build.ps1 -Install`:
 
 ```xml
-<string-array name="dock_apps">
+<string-array name="favorite_apps">   <!-- llenan la barra mientras no hay historial de uso -->
     <item>com.netflix.ninja</item>
     <item>com.google.android.youtube.tv</item>
     ...
 </string-array>
-<integer name="dock_max">5</integer>
+<string-array name="music_apps">      <!-- las que controla el mini reproductor -->
+    <item>com.spotify.tv.android</item>
+</string-array>
+<integer name="row_max">10</integer>
 <integer name="grid_columns">6</integer>
 <integer name="wallpaper_minutes">10</integer>
+<integer name="screensaver_minutes">5</integer>
 ```
 
+Fijar o quitar apps de la barra no requiere recompilar: mantén OK sobre la app.
 Los colores de los paisajes están en `SCENES`, dentro de [`WallpaperView.java`](launcher/src/io/github/mlinescode/slimtv/WallpaperView.java).
 
 ## Scripts
@@ -141,11 +162,11 @@ Los colores de los paisajes están en `SCENES`, dentro de [`WallpaperView.java`]
 | `connect.ps1` | Conecta por Wi-Fi y guarda la IP |
 | `diagnose.ps1` | Top de procesos por RAM, apps y launcher; respalda el estado original en `state/` |
 | `debloat.ps1` | Desactiva los paquetes de una lista (con `-DryRun` para revisar) |
-| `restrict-background.ps1` | Quita el permiso de segundo plano a las apps de usuario |
+| `restrict-background.ps1` | Quita el permiso de segundo plano a las apps de usuario (menos las de música) |
 | `tweaks.ps1` | Velocidad de las animaciones (`-Scale`, `-Reset`) |
 | `build.ps1` | Compila el launcher **sin Gradle** → `dist/slimtv.apk` |
-| `install.ps1` | Instala SlimTV, comprueba que abre y solo entonces desactiva el launcher de fábrica |
-| `restore.ps1` | Deshace todo |
+| `install.ps1` | Instala SlimTV, comprueba que abre y solo entonces desactiva el launcher de fábrica; da los permisos de uso y de sesiones y lo elige como protector de pantalla |
+| `restore.ps1` | Deshace todo (incluido el protector de pantalla original) |
 
 ## Seguridad
 
@@ -155,6 +176,9 @@ Los colores de los paisajes están en `SCENES`, dentro de [`WallpaperView.java`]
   (ver `$Protected` en [`scripts/common.ps1`](scripts/common.ps1)).
 - **Todo queda registrado** en `state/<tv>/`, que es lo que `restore.ps1` usa para deshacer.
 - **Sin root, sin desbloquear el bootloader, sin tocar el firmware.**
+- **Permisos del launcher, sin internet:** uso de apps (para ordenar la barra) y sesiones de reproducción
+  (para "Seguías viendo" y el mini reproductor). Android exige registrarlo como "lector de notificaciones"
+  para ver las sesiones, pero SlimTV no lee ninguna notificación. Corre dentro del mismo proceso del launcher.
 
 ## Compatibilidad
 

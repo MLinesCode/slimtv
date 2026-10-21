@@ -3,7 +3,7 @@
 # SlimTV
 
 **Bring your 1 GB RAM Android TV back to life.**
-Reversible debloat + a 30 KB launcher that uses 20 MB of RAM.
+Reversible debloat + a 60 KB glass-style launcher that runs at 60 fps on 1 GB of RAM.
 
 [Español](README.md) · [Full process (ES)](docs/PROCESO.md) · [How it was built with AI (ES)](docs/IA.md) · [Add your model](CONTRIBUTING.md)
 
@@ -29,8 +29,9 @@ SlimTV needs no custom ROM and no root. It uses **ADB over Wi-Fi** to do four th
 1. **Disable bloatware:** demos, ads, telemetry, OEM apps. They are disabled, never uninstalled.
 2. **Block background auto-start**, so Netflix, HBO Max & co. don't load themselves at boot.
    *On 1 GB TVs this frees the most RAM.*
-3. **Replace the launcher** with an ultralight one: clock, Inputs/Wi-Fi/Settings, a dock of favorite apps,
-   and code-generated landscape wallpapers.
+3. **Replace the launcher** with an ultralight one: clock, Inputs/Wi-Fi/Settings, a glass row of apps
+   sorted by recent use, "Continue watching", a Spotify mini player and a screensaver with
+   code-generated landscapes.
 4. **Speed up system animations.**
 
 ## Results (Hisense HiSmart 2K ATV4, 903 MB RAM)
@@ -39,8 +40,22 @@ SlimTV needs no custom ROM and no root. It uses **ADB over Wi-Fi** to do four th
 |---|---|---|
 | Available RAM | ~265 MB | **~393 MB** (+48 %) |
 | Launcher memory | 115 MB (+31 MB in related services) | **23 MB** |
-| Launcher size | — | **29 KB** |
+| Launcher size | — | **61 KB** (29 KB in v1.0, without glass or extras) |
 | Apps auto-started at boot | Netflix, HBO Max, Mercado Play… | **None** |
+
+## The launcher
+
+- **Glass row** with up to 10 apps sorted by recent use (your `config.xml` favorites at first); it takes
+  the color of the focused app's brand.
+- **Continue watching:** a card with what you last played, progress and time left, for apps that publish
+  it in their media session (tested: Crunchyroll, YouTube, Spotify; Netflix and Prime Video don't share it).
+- **Mini player** for Spotify playing in the background (⏮ ⏯ ⏭).
+- **Hold OK on an app:** open, pin to the front, remove from the row, forget last watched, free memory,
+  app info or uninstall.
+- **Screensaver:** full-screen landscapes, a big clock and, only when useful, what's playing, what you
+  were watching or a "No internet" notice.
+- **No internet, no AndroidX.** The glass doesn't blur live (Android 11 can't): it crops a 160×90 blurred
+  copy of the wallpaper, so it costs nothing per frame. Navigating: 5 ms per frame, same as v1.0.
 
 ## Quick start
 
@@ -62,13 +77,17 @@ pwsh scripts/restrict-background.ps1
 
 **Undo everything:** `pwsh scripts/restore.ps1` (a factory reset also reverts it all).
 
-**Customize the dock:** edit [`launcher/res/values/config.xml`](launcher/res/values/config.xml) and run `pwsh scripts/build.ps1 -Install`.
+**Customize:** edit [`launcher/res/values/config.xml`](launcher/res/values/config.xml) (favorites, music apps, row size, minutes) and run `pwsh scripts/build.ps1 -Install`. Pinning or removing apps needs no rebuild: hold OK on the app.
 
 ## Safety
 - Packages are disabled with `pm disable-user` (reverted with `pm enable`). Nothing is uninstalled.
 - The scripts refuse to touch Play Services, Play Store, SystemUI, Settings, the tuner, HDMI inputs and the remote
   (`$Protected` in [`scripts/common.ps1`](scripts/common.ps1)).
-- Every change is logged in `state/<tv>/`, which is what `restore.ps1` uses to undo it.
+- Every change is logged in `state/<tv>/`, which is what `restore.ps1` uses to undo it (including the original screensaver).
+- `restrict-background.ps1` skips the music apps in `config.xml`: Spotify must keep playing after you leave it.
+- The launcher's special permissions are usage access (to sort the row) and media sessions (for "Continue
+  watching" and the mini player). Android requires registering as a "notification listener" to see sessions;
+  SlimTV reads no notifications.
 
 ## Built with AI
 SlimTV was designed, coded and tested **in a single conversation with [Claude Code](https://claude.com/claude-code)** (Anthropic),
