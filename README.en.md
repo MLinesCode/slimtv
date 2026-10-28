@@ -54,8 +54,52 @@ SlimTV needs no custom ROM and no root. It uses **ADB over Wi-Fi** to do four th
   app info or uninstall.
 - **Screensaver:** full-screen landscapes, a big clock and, only when useful, what's playing, what you
   were watching or a "No internet" notice.
-- **No internet, no AndroidX.** The glass doesn't blur live (Android 11 can't): it crops a 160×90 blurred
+- **No AndroidX, never connects to the internet** (it only listens on your home network for the remote). The glass doesn't blur live (Android 11 can't): it crops a 160×90 blurred
   copy of the wallpaper, so it costs nothing per frame. Navigating: 5 ms per frame, same as v1.0.
+
+## Phone remote
+
+The TV serves a web app on your home network: open it on your iPhone (or any phone) and add it to the
+home screen. No PC, nothing from the App Store.
+
+![Phone button on the home screen](docs/img/control-tv-boton.png)
+
+1. On the TV home screen pick **Celular** (top right). A QR code and a 6-digit code appear.
+2. Point the iPhone camera at the QR. The panel opens already paired. No camera: open the address the
+   TV shows (e.g. `192.168.1.50:8765`) and type the digits.
+3. The first time, the TV asks **"Allow debugging?"**: tick **Always allow** and accept. That enables
+   arrows, OK, Back and the keyboard.
+4. In Safari: **Share → Add to Home Screen**.
+
+| On the TV: pairing code | On the iPhone, without camera |
+|---|---|
+| ![QR and 6 digits on the TV](docs/img/control-tv-vincular.png) | <img src="docs/img/control-celular-vincular.png" alt="Typing the code on the iPhone" width="220"> |
+
+*Sample screenshots with a fictitious IP (`192.168.1.50`); your TV shows its own.*
+
+![iPhone panel: remote, apps, typing and settings](docs/img/control-celular.png)
+
+- **Touchpad** (swipe to move, tap for OK, hold for the app menu) or classic arrows; Back, Home, Pause,
+  volume with the TV's real level, and power off.
+- **Now playing** with artwork, progress and controls; **type** on the iPhone and it shows up in the TV's search box.
+- **Apps:** open any app, Inputs or Settings; pin, reorder or hide apps in the row.
+- **Settings:** your name in the greeting, the TV name, free memory and paired phones.
+
+**Arrows and keyboard.** Android doesn't let a normal app press keys inside other apps, so SlimTV connects to
+the TV's own ADB (`127.0.0.1:5555`) and starts a tiny process that injects keys in milliseconds. It needs USB/network
+debugging on; if it's off, volume, music, launching apps and settings still work.
+
+**Performance cost** (Hisense 2K ATV4, 903 MB RAM):
+
+| | Result |
+|---|---|
+| Launcher memory (PSS) | **24 MB** fresh, **~38 MB** after use (cached logos/artwork): within v1.1's range |
+| Key-injector process | **~1–2 MB** real (10 MB RSS, almost all shared; 0.6 MB its own) |
+| CPU, remote idle | **~0 %** (launcher 0.02 s in 30 s, injector none) |
+| CPU, panel open on the iPhone | **~0.6 % of one core** (polls once per second, only while visible) |
+| Smoothness navigating with the remote | **5 ms** median frame, 99 % under 9 ms, **0.3 %** janky |
+| Key round trip (signed) | median **19 ms**, 95 % under 131 ms |
+| APK size | 61 KB → **105 KB** |
 
 ## Quick start
 
@@ -85,6 +129,11 @@ pwsh scripts/restrict-background.ps1
   (`$Protected` in [`scripts/common.ps1`](scripts/common.ps1)).
 - Every change is logged in `state/<tv>/`, which is what `restore.ps1` uses to undo it (including the original screensaver).
 - `restrict-background.ps1` skips the music apps in `config.xml`: Spotify must keep playing after you leave it.
+- **Remote:** answers only devices on your local network and only when addressed by IP (blocks DNS rebinding);
+  pairing requires the code shown on the TV (3 minutes, 5 tries); afterwards every request is signed with
+  HMAC-SHA256 plus time and a one-time number, so the key never travels again and captured requests can't be
+  replayed or altered. The API runs no shell commands. Limit: it's plain `http://` at home, so the key travels
+  once over your Wi-Fi when pairing.
 - The launcher's special permissions are usage access (to sort the row) and media sessions (for "Continue
   watching" and the mini player). Android requires registering as a "notification listener" to see sessions;
   SlimTV reads no notifications.

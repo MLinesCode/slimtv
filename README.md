@@ -3,7 +3,8 @@
 # SlimTV
 
 **Revive tu Android TV de 1 GB de RAM.**
-Limpieza reversible + un launcher de 60 KB con efecto vidrio que corre a 60 fps en 1 GB de RAM.
+Limpieza reversible + un launcher de ~100 KB con efecto vidrio que corre a 60 fps en 1 GB de RAM,
+y se controla desde el celular.
 
 [English](README.en.md) · [Proceso completo](docs/PROCESO.md) · [Cómo se hizo con IA](docs/IA.md) · [Agregar tu modelo](CONTRIBUTING.md)
 
@@ -33,8 +34,8 @@ para hacer cuatro cosas, **todas reversibles**:
 2. **Bloquear el arranque en segundo plano:** que Netflix, HBO Max & co. no se carguen solas al encender.
    *En TVs de 1 GB, esto es lo que más RAM libera.*
 3. **Reemplazar el launcher** por uno propio, ultraligero: reloj, accesos a Entradas/Wi-Fi/Ajustes,
-   una barra de vidrio con tus apps ordenadas por uso, "Seguías viendo", mini reproductor de Spotify
-   y un protector de pantalla con paisajes generados por código.
+   una barra de vidrio con tus apps ordenadas por uso, "Seguías viendo", mini reproductor de Spotify,
+   un protector de pantalla con paisajes generados por código y **control remoto desde el iPhone**.
 4. **Acelerar las animaciones** del sistema.
 
 ## Resultados (Hisense HiSmart 2K ATV4, 903 MB de RAM)
@@ -43,12 +44,12 @@ para hacer cuatro cosas, **todas reversibles**:
 |---|---|---|
 | RAM disponible | ~265 MB | **~393 MB** (+48 %) |
 | Memoria del launcher | 115 MB (+31 MB de servicios asociados) | **23 MB** |
-| Tamaño del launcher | — | **61 KB** (29 KB en la v1.0, sin vidrio ni extras) |
+| Tamaño del launcher | — | **105 KB** con el control remoto (61 KB en la v1.1, 29 KB en la v1.0) |
 | Apps cargadas solas al encender | Netflix, HBO Max, Mercado Play… | **Ninguna** |
 
 ## El launcher
 
-- **Arriba:** reloj, fecha y saludo. A la derecha, en una cápsula de vidrio: **Entradas** (HDMI), **Wi-Fi** y **Ajustes**.
+- **Arriba:** reloj, fecha y saludo. A la derecha, en una cápsula de vidrio: **Celular** (control remoto), **Entradas** (HDMI), **Wi-Fi** y **Ajustes**.
 - **Barra de vidrio:** hasta 10 apps **ordenadas por uso reciente** (al principio, tus favoritas de `config.xml`).
   La seleccionada se agranda y la barra se tiñe con el color de su marca. Al final, **Todas las apps**.
 - **Seguías viendo:** al seleccionar una app aparece una tarjeta con lo último que reprodujiste, el progreso
@@ -76,12 +77,22 @@ para hacer cuatro cosas, **todas reversibles**:
 La TV sirve una app web en tu red local: ábrela en el iPhone (o cualquier celular) y agrégala a la
 pantalla de inicio. No hace falta la PC ni instalar nada de la App Store.
 
+![Botón Celular en el inicio](docs/img/control-tv-boton.png)
+
 1. En el inicio de la TV elige **Celular** (arriba a la derecha). Aparece un código QR y 6 números.
 2. Apunta la cámara del iPhone al QR. Se abre el panel y queda vinculado.
-   Sin cámara: entra a la dirección que muestra la TV (p. ej. `192.168.68.110:8765`) y escribe los números.
+   Sin cámara: entra a la dirección que muestra la TV (p. ej. `192.168.1.50:8765`) y escribe los números.
 3. La primera vez, la TV pregunta **«¿Permitir la depuración?»**: marca **Permitir siempre** y acepta.
    Eso activa las flechas, OK, Atrás y el teclado (ver abajo).
 4. En Safari: **Compartir → Agregar a inicio** para tenerlo como app.
+
+| En la TV: código para vincular | En el iPhone, sin cámara |
+|---|---|
+| ![Código QR y 6 números en la TV](docs/img/control-tv-vincular.png) | <img src="docs/img/control-celular-vincular.png" alt="Pantalla para escribir el código en el iPhone" width="220"> |
+
+*Capturas de ejemplo con una IP ficticia (`192.168.1.50`); en tu TV aparece la suya.*
+
+![Panel en el iPhone: control, apps, escribir y ajustes](docs/img/control-celular.png)
 
 Qué trae:
 
@@ -98,6 +109,22 @@ conecta a la ADB de la propia TV (`127.0.0.1:5555`, la misma que usan los script
 chico que inyecta las teclas: tardan milisegundos. Requiere la depuración USB/por red activa. Si se
 apaga (algunas TVs la apagan al reiniciar), el volumen, la música, abrir apps y los ajustes siguen
 funcionando; solo se apagan las flechas y el teclado.
+
+**Cuánto cuesta en rendimiento** (medido en la Hisense 2K ATV4, 903 MB de RAM):
+
+| | Resultado |
+|---|---|
+| Memoria del launcher (PSS) | **24 MB** recién abierto, **~38 MB** tras usarlo (logos y carátulas en caché): dentro del rango de la v1.1 |
+| Proceso de las flechas (inyector) | **~1–2 MB** reales: 10 MB de RSS, casi todo compartido con el sistema; solo 0.6 MB propios |
+| CPU sin usar el control | **~0 %**: el launcher usó 0.02 s en 30 s y el inyector nada |
+| CPU con el panel abierto en el iPhone | **~0.6 % de un núcleo** (consulta el estado una vez por segundo, solo mientras lo ves) |
+| Fluidez navegando con el control | **5 ms** por cuadro (mediana), 99 % por debajo de 9 ms, **0.3 %** de cuadros con tirones |
+| Respuesta de una tecla (ida y vuelta, firmada) | mediana **19 ms**, 95 % por debajo de 131 ms |
+| Tamaño del APK | 61 KB → **105 KB** |
+
+Por qué es tan barato: el servidor duerme hasta que alguien se conecta, el panel deja de consultar si
+bloqueas el iPhone o cambias de app, el inyector se queda abierto (lanzar `input keyevent` costaría medio
+segundo por tecla) y las cachés de logos y carátulas tienen tope (768 KB).
 
 ---
 
