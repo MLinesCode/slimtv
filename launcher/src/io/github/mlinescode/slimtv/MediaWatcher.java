@@ -36,7 +36,8 @@ public class MediaWatcher extends NotificationListenerService {
     @Override public void onListenerConnected() {
         Runnable r = onConnected;
         if (r != null) handler.post(r);
-        msm = getSystemService(MediaSessionManager.class);
+        Remote.start(this); // el control remoto vive mientras el sistema mantenga este servicio
+        msm =getSystemService(MediaSessionManager.class);
         ComponentName me = new ComponentName(this, MediaWatcher.class);
         try {
             msm.addOnActiveSessionsChangedListener(sessionsListener, me, handler);

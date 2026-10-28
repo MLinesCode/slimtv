@@ -1,10 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="io.github.mlinescode.slimtv"
-    android:versionCode="2"
-    android:versionName="1.1.0">
+    android:versionCode="3"
+    android:versionName="1.2.0">
 
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Control remoto desde el celular: SlimTV escucha en la red local (puerto 8765) y habla con
+         la ADB de la propia TV (127.0.0.1). No se conecta a internet. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Abrir apps desde el celular aunque otra app esté en pantalla. install.ps1 lo otorga con
+         appops set ... SYSTEM_ALERT_WINDOW allow; SlimTV no dibuja nada encima de otras apps. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <!-- Barra por uso reciente: install.ps1 lo otorga con  appops set ... GET_USAGE_STATS allow -->
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
     <!-- Menú de cada app: "Liberar memoria" y "Desinstalar" (Android pide confirmación) -->

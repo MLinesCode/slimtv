@@ -34,6 +34,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.text.format.DateFormat;
@@ -135,6 +136,13 @@ public class MainActivity extends Activity {
     private FrameLayout cardTrack;
     private int cardAccent = Color.WHITE;
 
+    // Vincular un celular (control remoto): código QR + código de 6 dígitos
+    private Remote remote;
+    private FrameLayout pairPanel;
+    private ImageView pairQr;
+    private TextView pairTitle, pairStep, pairUrl, pairCode, pairFoot;
+    private long pairUntil;
+
     private Shelf rowScroll;
     private LinearLayout row;
     private FrameLayout overlay;
@@ -170,6 +178,25 @@ public class MainActivity extends Activity {
 
     private final Runnable showFocused = this::bindHero;
 
+    // Lo que se cambia desde el celular (fijadas, ocultas, saludo) se aplica al momento.
+    private final SharedPreferences.OnSharedPreferenceChangeListener layoutListener = (sp, key) ->
+            handler.post(() -> {
+                if ("greet".equals(key)) updateClock();
+                else if ("pinned".equals(key) || "excluded".equals(key)) reorder();
+            });
+
+    private final Runnable pairTick = new Runnable() {
+        @Override public void run() {
+            long left = pairUntil - SystemClock.elapsedRealtime();
+            if (left <= 0) { newPairCode(); left = pairUntil - SystemClock.elapsedRealtime(); }
+            long s = (left + 999) / 1000;
+            int n = remote.pairedCount();
+            pairFoot.setText(String.format(ES, "El código cambia en %d:%02d", s / 60, s % 60)
+                    + (n == 0 ? "" : n == 1 ? "  ·  1 celular vinculado" : "  ·  " + n + " celulares vinculados"));
+            handler.postDelayed(this, 1000);
+        }
+    };
+
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         getWindow().getDecorView().setSystemUiVisibility(
@@ -203,7 +230,10 @@ public class MainActivity extends Activity {
         root.addView(buildShelf(), shelfParams());
         root.addView(buildOverlay(), new FrameLayout.LayoutParams(MATCH, MATCH));
         root.addView(buildMenu(), new FrameLayout.LayoutParams(dp(270), WRAP, Gravity.TOP | Gravity.START));
+        root.addView(buildPair(), new FrameLayout.LayoutParams(MATCH, MATCH));
         setContentView(root);
+        remote = Remote.start(this);
+        layout.registerOnSharedPreferenceChangeListener(layoutListener);
 
         IntentFilter f = new IntentFilter();
         f.addAction(Intent.ACTION_PACKAGE_ADDED);
@@ -241,6 +271,7 @@ public class MainActivity extends Activity {
         actions.setGravity(Gravity.CENTER_VERTICAL);
         actions.setPadding(dp(4), dp(4), dp(4), dp(4));
         actions.setBackground(new GlassDrawable(actions, wallpaper, dp(24), 0x1AFFFFFF, dp(1)));
+        actions.addView(action(R.drawable.ic_phone, "Celular", this::openPair));
         actions.addView(action(R.drawable.ic_input, "Entradas", this::openInputs));
         LinearLayout wifi = action(R.drawable.ic_wifi, "Wi-Fi",
                 () -> safeStart(new Intent(Settings.ACTION_WIFI_SETTINGS)));
@@ -504,6 +535,7 @@ public class MainActivity extends Activity {
         handler.removeCallbacks(tick);
         wallpaper.stop();
         stopMusic();
+        closePair();
         if (menu.getVisibility() != View.GONE) {
             menu.setVisibility(View.GONE);
             heroView.setAlpha(1f);
@@ -514,6 +546,8 @@ public class MainActivity extends Activity {
     @Override protected void onDestroy() {
         NowPlaying.onChange = null;
         MediaWatcher.onConnected = null;
+        Remote.onPaired = null;
+        layout.unregisterOnSharedPreferenceChangeListener(layoutListener);
         unregisterReceiver(packageReceiver);
         getSystemService(ConnectivityManager.class).unregisterNetworkCallback(networkCallback);
         bg.shutdownNow();
@@ -536,6 +570,11 @@ public class MainActivity extends Activity {
         if (e.getAction() != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(e);
         int k = e.getKeyCode();
         View f = getCurrentFocus();
+
+        if (pairPanel.getVisibility() == View.VISIBLE) {
+            if (k == KeyEvent.KEYCODE_BACK || k == KeyEvent.KEYCODE_DPAD_CENTER || k == KeyEvent.KEYCODE_ENTER) closePair();
+            return true;
+        }
 
         if (menu.getVisibility() == View.VISIBLE) {
             if (k == KeyEvent.KEYCODE_BACK || k == KeyEvent.KEYCODE_MENU) { closeMenu(); return true; }
@@ -620,6 +659,124 @@ public class MainActivity extends Activity {
         overlay.animate().alpha(0f).translationY(dp(20)).setDuration(180).withLayer()
                 .withEndAction(() -> overlay.setVisibility(View.GONE)).start();
         focusPkg(focusedPkg);
+    }
+
+    // ---------- Vincular un celular ----------
+
+    private View buildPair() {
+        pairPanel = new FrameLayout(this);
+        pairPanel.setBackground(new GlassDrawable(pairPanel, wallpaper, 0, 0xA60A0A12, 0));
+        pairPanel.setVisibility(View.GONE);
+
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setPadding(dp(28), dp(28), dp(40), dp(28));
+        card.setBackground(new GlassDrawable(card, wallpaper, dp(28), 0x1FFFFFFF, dp(1)));
+
+        // El QR va sobre blanco con margen: las cámaras lo leen mejor que sobre el vidrio.
+        FrameLayout qrBox = new FrameLayout(this);
+        GradientDrawable white = new GradientDrawable();
+        white.setColor(Color.WHITE);
+        white.setCornerRadius(dp(18));
+        qrBox.setBackground(white);
+        qrBox.setPadding(dp(14), dp(14), dp(14), dp(14));
+        pairQr = new ImageView(this);
+        pairQr.setScaleType(ImageView.ScaleType.CENTER);
+        qrBox.addView(pairQr, new FrameLayout.LayoutParams(dp(196), dp(196)));
+        card.addView(qrBox, new LinearLayout.LayoutParams(WRAP, WRAP));
+
+        LinearLayout txt = new LinearLayout(this);
+        txt.setOrientation(LinearLayout.VERTICAL);
+        txt.setPadding(dp(32), 0, 0, 0);
+        pairTitle = text(26, "sans-serif-medium");
+        pairTitle.setPadding(0, 0, 0, dp(14));
+        txt.addView(pairTitle);
+        pairStep = text(15, "sans-serif");
+        pairStep.setTextColor(0xD9FFFFFF);
+        pairStep.setLineSpacing(dp(4), 1f);
+        txt.addView(pairStep);
+        pairUrl = text(15, "sans-serif-medium");
+        pairUrl.setPadding(0, dp(4), 0, 0);
+        txt.addView(pairUrl);
+        pairCode = text(44, "sans-serif-light");
+        pairCode.setLetterSpacing(0.12f);
+        pairCode.setPadding(0, dp(10), 0, dp(6));
+        txt.addView(pairCode);
+        pairFoot = text(12, "sans-serif");
+        pairFoot.setTextColor(0x99FFFFFF);
+        txt.addView(pairFoot);
+        card.addView(txt, new LinearLayout.LayoutParams(dp(420), WRAP));
+
+        pairPanel.addView(card, new FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER));
+        return pairPanel;
+    }
+
+    private void openPair() {
+        if (remote.address() == null) {
+            Toast.makeText(this, "Conecta la TV a la red para usar el celular como control", Toast.LENGTH_LONG).show();
+            return;
+        }
+        pairTitle.setText("Usa tu celular como control");
+        pairStep.setText("Apunta la cámara del iPhone a este código.\n¿Prefieres escribirlo? Entra a");
+        pairCode.setVisibility(View.VISIBLE);
+        pairUrl.setVisibility(View.VISIBLE);
+        pairQr.setAlpha(1f);
+        newPairCode();
+        Remote.onPaired = name -> handler.post(() -> onPaired(name));
+        pairPanel.setVisibility(View.VISIBLE);
+        pairPanel.setAlpha(0f);
+        pairPanel.animate().alpha(1f).setDuration(200).withLayer().start();
+        pairPanel.invalidate();
+        handler.removeCallbacks(pairTick);
+        pairTick.run();
+    }
+
+    private void newPairCode() {
+        String code = remote.startPairing();
+        String url = remote.address();
+        if (url == null) { closePair(); return; }
+        pairUntil = SystemClock.elapsedRealtime() + 3 * 60_000 - 2_000;
+        pairUrl.setText(url.replace("http://", ""));
+        pairCode.setText(code.substring(0, 3) + " " + code.substring(3));
+        // El código va después de "#": el navegador no lo manda por la red ni lo guarda en el servidor.
+        pairQr.setImageBitmap(qrBitmap(url + "/#c=" + code));
+    }
+
+    private void onPaired(String name) {
+        if (pairPanel.getVisibility() != View.VISIBLE) return;
+        handler.removeCallbacks(pairTick);
+        pairTitle.setText(name + " ya es tu control");
+        pairStep.setText("Si la TV pregunta «¿Permitir la depuración?», marca\n«Permitir siempre» y acepta: así funcionan las\nflechas y el teclado desde el celular.");
+        pairCode.setVisibility(View.GONE);
+        pairUrl.setVisibility(View.GONE);
+        pairFoot.setText("");
+        pairQr.animate().alpha(0.15f).setDuration(300).start();
+        handler.postDelayed(this::closePair, 6000);
+    }
+
+    private void closePair() {
+        if (pairPanel == null || pairPanel.getVisibility() != View.VISIBLE) return;
+        handler.removeCallbacks(pairTick);
+        Remote.onPaired = null;
+        remote.cancelPairing();
+        pairPanel.animate().alpha(0f).setDuration(160).withLayer()
+                .withEndAction(() -> pairPanel.setVisibility(View.GONE)).start();
+    }
+
+    /** Módulos de tamaño entero en píxeles y sin escalar después: bordes nítidos para la cámara. */
+    private Bitmap qrBitmap(String text) {
+        boolean[][] m = Qr.encode(text);
+        int n = m.length, scale = Math.max(1, dp(196) / n), size = n * scale;
+        Bitmap b = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(b);
+        c.drawColor(Color.WHITE);
+        android.graphics.Paint p = new android.graphics.Paint();
+        p.setColor(0xFF0B0B10);
+        for (int y = 0; y < n; y++) {
+            for (int x = 0; x < n; x++) if (m[y][x]) c.drawRect(x * scale, y * scale, (x + 1) * scale, (y + 1) * scale, p);
+        }
+        return b;
     }
 
     // ---------- Apps y orden ----------
@@ -1129,7 +1286,7 @@ public class MainActivity extends Activity {
      * Color de marca del banner: promedio de los píxeles con color (los blancos, negros y grises del
      * fondo no cuentan), así YouTube y Netflix dan rojo y no gris. Muestrea 16×9 px, una vez por app.
      */
-    private static int glowColor(Drawable d) {
+    static int glowColor(Drawable d) {
         if (d == null) return Color.WHITE;
         Drawable copy = copy(d);
         Bitmap b = Bitmap.createBitmap(16, 9, Bitmap.Config.ARGB_8888);
@@ -1314,6 +1471,8 @@ public class MainActivity extends Activity {
         clock.setText(DateFormat.format(DateFormat.is24HourFormat(this) ? "HH:mm" : "h:mm", now));
         int h = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
         String greet = h < 6 ? "Buenas noches" : h < 12 ? "Buenos días" : h < 19 ? "Buenas tardes" : "Buenas noches";
+        String name = layout.getString("greet", "");
+        if (!name.isEmpty()) greet += ", " + name;
         String d = new SimpleDateFormat("EEEE d 'de' MMMM", ES).format(now);
         date.setText(Character.toUpperCase(d.charAt(0)) + d.substring(1) + "  ·  " + greet);
     }

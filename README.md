@@ -60,7 +60,7 @@ para hacer cuatro cosas, **todas reversibles**:
 - **Protector de pantalla:** los paisajes a pantalla completa con reloj grande y, solo si hay algo útil,
   lo que suena, lo último que veías o un aviso de "Sin internet". Se mueve cada 90 s.
 - **Fondos:** 6 paisajes dibujados por código con bruma atmosférica. No usa fotos: ~1 MB de RAM.
-- **Ligero a propósito:** Java puro, sin AndroidX y **sin internet**. El vidrio no desenfoca en vivo
+- **Ligero a propósito:** Java puro, sin AndroidX y **sin conectarse a internet** (solo escucha en tu red local para el control remoto). El vidrio no desenfoca en vivo
   (Android 11 no puede): recorta una copia de 160×90 del fondo, así que no cuesta nada por cuadro.
 
 | Rendimiento navegando (Hisense 2K ATV4, `dumpsys gfxinfo`) | v1.0 | v1.1 |
@@ -70,6 +70,34 @@ para hacer cuatro cosas, **todas reversibles**:
 | Memoria del launcher (PSS, medida igual en las dos) | ~54 MB | **~39–54 MB** |
 
 ![Todas las apps](docs/img/todas-las-apps.png)
+
+## Control remoto desde el celular
+
+La TV sirve una app web en tu red local: ábrela en el iPhone (o cualquier celular) y agrégala a la
+pantalla de inicio. No hace falta la PC ni instalar nada de la App Store.
+
+1. En el inicio de la TV elige **Celular** (arriba a la derecha). Aparece un código QR y 6 números.
+2. Apunta la cámara del iPhone al QR. Se abre el panel y queda vinculado.
+   Sin cámara: entra a la dirección que muestra la TV (p. ej. `192.168.68.110:8765`) y escribe los números.
+3. La primera vez, la TV pregunta **«¿Permitir la depuración?»**: marca **Permitir siempre** y acepta.
+   Eso activa las flechas, OK, Atrás y el teclado (ver abajo).
+4. En Safari: **Compartir → Agregar a inicio** para tenerlo como app.
+
+Qué trae:
+
+- **Touchpad:** desliza para moverte (un deslizamiento largo recorre la lista), toca para OK y mantén
+  presionado para el menú de la app. Si prefieres, cambia a flechas clásicas.
+- **Atrás, Inicio, Pausa, volumen** (con el nivel real de la TV) y **apagar**.
+- **Ahora suena:** carátula, progreso y controles de lo que se reproduce (Spotify, YouTube, Crunchyroll…).
+- **Escribir:** lo que tecleas en el iPhone aparece al instante en el buscador de la TV.
+- **Apps:** abre cualquier app, Entradas o Ajustes; fija apps al principio de la barra, ordénalas u ocúltalas.
+- **Ajustes:** tu nombre en el saludo, el nombre de la TV, liberar memoria y los celulares vinculados.
+
+**Flechas y teclado.** Android no deja que una app normal pulse teclas dentro de otras apps. SlimTV se
+conecta a la ADB de la propia TV (`127.0.0.1:5555`, la misma que usan los scripts) y arranca un proceso
+chico que inyecta las teclas: tardan milisegundos. Requiere la depuración USB/por red activa. Si se
+apaga (algunas TVs la apagan al reiniciar), el volumen, la música, abrir apps y los ajustes siguen
+funcionando; solo se apagan las flechas y el teclado.
 
 ---
 
@@ -176,7 +204,18 @@ Los colores de los paisajes están en `SCENES`, dentro de [`WallpaperView.java`]
   (ver `$Protected` en [`scripts/common.ps1`](scripts/common.ps1)).
 - **Todo queda registrado** en `state/<tv>/`, que es lo que `restore.ps1` usa para deshacer.
 - **Sin root, sin desbloquear el bootloader, sin tocar el firmware.**
-- **Permisos del launcher, sin internet:** uso de apps (para ordenar la barra) y sesiones de reproducción
+- **Control remoto:**
+  - Solo responde a dispositivos de tu red local y solo si se le habla por IP (bloquea el «DNS rebinding»).
+  - Vincular exige estar frente a la TV: el código dura 3 minutos y acepta 5 intentos.
+  - Al vincular, el celular recibe una llave de 256 bits. Desde ahí cada orden va firmada con HMAC-SHA256,
+    con hora y un número único: la llave no vuelve a viajar por la red, y una orden capturada no se puede
+    repetir ni modificar.
+  - La API no ejecuta comandos de shell: solo teclas de una lista fija, texto, volumen, música y abrir apps.
+  - Desde *Ajustes* del panel puedes ver y quitar celulares vinculados.
+  - Límite honesto: el panel va por `http://` dentro de tu casa. Al vincular, la llave viaja una vez por
+    tu Wi-Fi; quien ya estuviera espiando esa red en ese momento podría copiarla. Vincula en una red de
+    confianza y quita los celulares que ya no uses.
+- **Permisos del launcher, sin conectarse a internet:** uso de apps (para ordenar la barra) y sesiones de reproducción
   (para "Seguías viendo" y el mini reproductor). Android exige registrarlo como "lector de notificaciones"
   para ver las sesiones, pero SlimTV no lee ninguna notificación. Corre dentro del mismo proceso del launcher.
 

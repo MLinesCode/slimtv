@@ -60,6 +60,9 @@ if (-not $KeepStockLauncher) {
 # Permisos especiales que no se piden en pantalla (todo reversible; restore.ps1 los quita al desinstalar).
 Invoke-Tv $dev shell appops set $pkg GET_USAGE_STATS allow | Out-Null
 Write-Host "  [permiso] uso de apps: la barra se ordena por lo que usas"
+# Sin esto Android no deja abrir una app desde el celular mientras otra está en pantalla.
+Invoke-Tv $dev shell appops set $pkg SYSTEM_ALERT_WINDOW allow | Out-Null
+Write-Host "  [permiso] control remoto: abrir apps desde el celular (SlimTV no dibuja encima de otras apps)"
 $r = Invoke-Tv $dev shell cmd notification allow_listener "$pkg/$pkg.MediaWatcher"
 if ("$r" -match "rror|nknown|xception") {
     Write-Host "  [aviso] no pude activar 'Seguías viendo' por ADB ($r)." -ForegroundColor Yellow

@@ -1,0 +1,992 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SlimTV">
+<meta name="theme-color" content="#0B0D12">
+<meta name="format-detection" content="telephone=no">
+<meta name="referrer" content="no-referrer">
+<link rel="apple-touch-icon" href="/icon.png">
+<title>SlimTV</title>
+<!--
+  Panel del control remoto de SlimTV. Lo sirve la propia TV (Remote.java); no carga nada de internet.
+  Estilo: el del launcher. Vidrio oscuro, blanco como único acento (es el color del foco en la TV) y
+  un tinte con el color de la app que está en pantalla, como la barra de apps del inicio.
+  Seguridad: cada petición va firmada con HMAC-SHA256 (la llave se queda en este iPhone).
+-->
+<style>
+:root {
+  --bg: #0B0D12;
+  --tint: #3A4A66;
+  --surface: rgba(255,255,255,.065);
+  --surface-2: rgba(255,255,255,.11);
+  --line: rgba(255,255,255,.10);
+  --ink: #F4F6FA;
+  --ink-2: rgba(232,238,250,.66);
+  --ink-3: rgba(232,238,250,.42);
+  --danger: #FF8A80;
+  --r-card: 20px;
+  --r-pad: 30px;
+  --gutter: 16px;
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none;
+  overscroll-behavior: none;
+}
+/* Tinte de la app en pantalla: la barra del launcher hace lo mismo con el color de la marca. */
+.tint {
+  position: fixed; inset: 0 0 auto 0; height: 46vh; pointer-events: none; z-index: 0;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tint) 34%, transparent), transparent);
+  transition: background .6s ease;
+}
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+input { font: inherit; color: var(--ink); }
+svg.i { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+.view { position: relative; z-index: 1; min-height: 100%; padding: calc(var(--safe-t) + 12px) var(--gutter) calc(var(--safe-b) + 96px); }
+.top { display: flex; align-items: center; gap: 12px; min-height: 52px; }
+.top .who { flex: 1; min-width: 0; }
+.top h1 { font-size: 22px; font-weight: 650; margin: 0; letter-spacing: -.01em; }
+.top p { margin: 2px 0 0; color: var(--ink-2); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.round { width: 44px; height: 44px; border-radius: 999px; display: grid; place-items: center; background: var(--surface); border: 1px solid var(--line); }
+.round:active { background: var(--surface-2); }
+
+.notice { margin: 12px 0 0; padding: 12px 14px; border-radius: 14px; background: rgba(255,138,128,.12); border: 1px solid rgba(255,138,128,.28); color: #FFD7D2; font-size: 14px; }
+.notice b { color: #fff; font-weight: 600; }
+.hint { margin: 12px 0 0; padding: 12px 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); color: var(--ink-2); font-size: 14px; }
+.hint b { color: var(--ink); font-weight: 600; }
+
+/* Ahora suena */
+.now { margin-top: 14px; display: grid; grid-template-columns: 64px 1fr; gap: 14px; align-items: center; padding: 12px; border-radius: var(--r-card); background: var(--surface); border: 1px solid var(--line); }
+.now .art { width: 64px; height: 64px; border-radius: 12px; background: var(--surface-2) center/cover no-repeat; }
+.now .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.now .s { color: var(--ink-2); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar { height: 4px; border-radius: 99px; background: rgba(255,255,255,.14); margin-top: 8px; overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 0; background: var(--ink); border-radius: 99px; }
+.now .ctl { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; padding: 0 4px; }
+.now .ctl button { width: 48px; height: 44px; display: grid; place-items: center; border-radius: 999px; }
+.now .ctl button:active { background: var(--surface-2); }
+.now .ctl .main { width: 56px; height: 56px; background: var(--ink); color: #0B0D12; }
+.now .ctl .main:active { background: #D9DEE8; }
+.now .time { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; margin-top: 4px; display: flex; justify-content: space-between; }
+
+/* Touchpad */
+.pad { position: relative; margin-top: 14px; width: 100%; aspect-ratio: 1 / .92; max-height: 42vh; border-radius: var(--r-pad);
+  background: linear-gradient(180deg, rgba(255,255,255,.085), rgba(255,255,255,.04)); border: 1px solid var(--line);
+  touch-action: none; overflow: hidden; }
+.pad .spot { position: absolute; left: 0; top: 0; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255,255,255,.22), rgba(255,255,255,0)); opacity: 0; transition: opacity .25s; pointer-events: none; }
+.pad.down .spot { opacity: 1; transition: opacity .06s; }
+.pad .edge { position: absolute; color: var(--ink-3); transition: color .25s, transform .25s; pointer-events: none; }
+.pad .edge.hit { color: var(--ink); transition: none; }
+.pad .e-up { top: 14px; left: 50%; transform: translateX(-50%); }
+.pad .e-down { bottom: 14px; left: 50%; transform: translateX(-50%) rotate(180deg); }
+.pad .e-left { left: 14px; top: 50%; transform: translateY(-50%) rotate(-90deg); }
+.pad .e-right { right: 14px; top: 50%; transform: translateY(-50%) rotate(90deg); }
+.pad .say { position: absolute; inset: auto 0 50% 0; transform: translateY(50%); text-align: center; color: var(--ink-3); font-size: 14px; pointer-events: none; transition: opacity .3s; }
+.pad.used .say { opacity: 0; }
+
+/* D-pad clásico */
+.dpad { position: relative; margin: 14px auto 0; width: min(100%, 300px); aspect-ratio: 1; border-radius: 50%; background: var(--surface); border: 1px solid var(--line); touch-action: none; }
+.dpad button { position: absolute; display: grid; place-items: center; color: var(--ink-2); }
+.dpad .d-up, .dpad .d-down { left: 33%; width: 34%; height: 33%; }
+.dpad .d-left, .dpad .d-right { top: 33%; height: 34%; width: 33%; }
+.dpad .d-up { top: 0; } .dpad .d-down { bottom: 0; } .dpad .d-left { left: 0; } .dpad .d-right { right: 0; }
+.dpad .d-down svg { transform: rotate(180deg); } .dpad .d-left svg { transform: rotate(-90deg); } .dpad .d-right svg { transform: rotate(90deg); }
+.dpad .d-ok { left: 31%; top: 31%; width: 38%; height: 38%; border-radius: 50%; background: var(--surface-2); color: var(--ink); font-weight: 600; font-size: 17px; }
+.dpad button:active { color: var(--ink); }
+.dpad .d-ok:active { background: var(--ink); color: #0B0D12; }
+
+.mode { display: flex; justify-content: center; margin-top: 10px; }
+.mode button { min-height: 44px; padding: 0 14px; color: var(--ink-3); font-size: 14px; display: inline-flex; gap: 8px; align-items: center; }
+
+.keys { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 8px; }
+.key { min-height: 60px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 12px; color: var(--ink-2); }
+.key svg { color: var(--ink); }
+.key:active, .key.on { background: var(--surface-2); }
+
+.vol { margin-top: 10px; display: grid; grid-template-columns: 60px 1fr 60px; gap: 10px; }
+.vol .key { min-height: 56px; }
+.level { border-radius: 18px; background: var(--surface); border: 1px solid var(--line); display: flex; align-items: center; gap: 10px; padding: 0 14px; min-height: 56px; }
+.level .bar { flex: 1; margin: 0; height: 6px; }
+.level .n { font-variant-numeric: tabular-nums; color: var(--ink-2); font-size: 14px; min-width: 2ch; text-align: right; }
+.level.muted .bar > i { background: var(--ink-3); }
+
+/* Apps */
+h2 { font-size: 28px; font-weight: 700; letter-spacing: -.015em; margin: 6px 0 4px; }
+h3 { font-size: 17px; font-weight: 600; margin: 26px 0 10px; }
+.lead { color: var(--ink-2); font-size: 15px; margin: 0; }
+.chips { display: flex; gap: 8px; overflow-x: auto; margin: 14px calc(-1 * var(--gutter)) 0; padding: 0 var(--gutter); scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chip { flex: none; min-height: 44px; padding: 0 16px 0 12px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); display: inline-flex; align-items: center; gap: 8px; font-size: 15px; }
+.chip:active { background: var(--surface-2); }
+.search { margin-top: 14px; display: flex; align-items: center; gap: 10px; padding: 0 14px; min-height: 46px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); color: var(--ink-3); }
+.search input { flex: 1; background: none; border: 0; outline: 0; min-height: 44px; }
+.search input::placeholder { color: var(--ink-3); }
+.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 12px; margin-top: 12px; }
+.app { text-align: left; }
+.app .ban { aspect-ratio: 16/9; border-radius: 14px; background: color-mix(in srgb, var(--c, #fff) 24%, #161A22) center/cover no-repeat; border: 1px solid var(--line); transition: transform .12s; }
+.app:active .ban { transform: scale(.97); }
+.app .lbl { margin-top: 6px; font-size: 14px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app .lbl b { color: var(--ink); font-weight: 600; }
+.list { border-radius: var(--r-card); background: var(--surface); border: 1px solid var(--line); overflow: hidden; }
+.row { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 8px 8px 14px; border-top: 1px solid var(--line); }
+.row:first-child { border-top: 0; }
+.row .grow { flex: 1; min-width: 0; }
+.row .grow div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .sub { color: var(--ink-3); font-size: 13px; }
+.row .mini { width: 64px; height: 36px; border-radius: 8px; background: color-mix(in srgb, var(--c, #fff) 24%, #161A22) center/cover no-repeat; flex: none; }
+.row .ic { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 999px; color: var(--ink-2); }
+.row .ic:active { background: var(--surface-2); color: var(--ink); }
+.row .ic:disabled { opacity: .3; }
+.empty { padding: 18px 14px; color: var(--ink-2); font-size: 14px; }
+
+/* Ajustes */
+.field { display: block; padding: 10px 14px 12px; }
+.field span { display: block; font-size: 13px; color: var(--ink-3); }
+.field input { width: 100%; background: none; border: 0; outline: 0; font-size: 17px; padding: 4px 0 0; min-height: 30px; }
+.field input::placeholder { color: var(--ink-3); }
+.btn { min-height: 50px; padding: 0 22px; border-radius: 999px; background: var(--ink); color: #0B0D12; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.btn:active { background: #D9DEE8; }
+.btn:disabled { opacity: .5; }
+.btn.ghost { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
+.btn.ghost:active { background: var(--surface-2); }
+.btn.wide { width: 100%; }
+.danger { color: var(--danger) !important; }
+.mem { padding: 14px; }
+.mem .bar { height: 8px; margin: 10px 0 14px; }
+.state { display: flex; gap: 10px; align-items: flex-start; padding: 14px; }
+.state .dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; flex: none; background: var(--ink-3); }
+.state .dot.ok { background: #7EE2A8; }
+.state .dot.warn { background: #FFD27A; }
+.state p { margin: 2px 0 0; color: var(--ink-2); font-size: 14px; }
+
+/* Barra de pestañas */
+.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: grid; grid-template-columns: repeat(3, 1fr);
+  padding: 6px 8px calc(var(--safe-b) + 6px); background: rgba(11,13,18,.82); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); border-top: 1px solid var(--line); }
+.tabs button { min-height: 50px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 11px; color: var(--ink-3); }
+.tabs button[aria-selected="true"] { color: var(--ink); }
+
+/* Hojas (teclado, menú de app, confirmar) */
+.scrim { position: fixed; inset: 0; z-index: 10; background: rgba(0,0,0,.5); opacity: 0; transition: opacity .2s; }
+.scrim.open { opacity: 1; }
+.sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 11; padding: 10px var(--gutter) calc(var(--safe-b) + 16px); border-radius: 24px 24px 0 0;
+  background: #161A22; border-top: 1px solid var(--line); transform: translateY(100%); transition: transform .28s cubic-bezier(.2,.8,.2,1); }
+.sheet.open { transform: none; }
+.sheet .grab { width: 36px; height: 5px; border-radius: 9px; background: rgba(255,255,255,.2); margin: 0 auto 12px; }
+.sheet h4 { font-size: 19px; font-weight: 650; margin: 0 0 4px; }
+.sheet p { margin: 0 0 14px; color: var(--ink-2); font-size: 14px; }
+.typebox { display: flex; gap: 8px; align-items: center; }
+.typebox input { flex: 1; min-height: 50px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); padding: 0 14px; outline: 0; font-size: 17px; -webkit-user-select: text; user-select: text; }
+.actions { display: grid; gap: 8px; }
+.actions button { min-height: 52px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); text-align: left; padding: 0 16px; display: flex; align-items: center; gap: 12px; }
+.actions button:active { background: var(--surface-2); }
+
+.toast { position: fixed; left: 50%; bottom: calc(var(--safe-b) + 84px); z-index: 20; transform: translate(-50%, 12px); opacity: 0; pointer-events: none;
+  padding: 11px 18px; border-radius: 999px; background: var(--ink); color: #0B0D12; font-size: 15px; font-weight: 600; transition: opacity .2s, transform .2s; max-width: calc(100% - 32px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* Vincular */
+.pair { position: relative; z-index: 1; min-height: 100%; display: flex; flex-direction: column; justify-content: center; padding: calc(var(--safe-t) + 24px) 24px calc(var(--safe-b) + 24px); max-width: 480px; margin: 0 auto; }
+.pair h2 { font-size: 30px; line-height: 1.15; margin: 0 0 10px; }
+.pair .lead { font-size: 16px; }
+.tvart { width: 120px; height: 76px; border-radius: 12px; border: 2px solid rgba(255,255,255,.5); position: relative; margin-bottom: 28px; }
+.tvart::after { content: ""; position: absolute; left: 40px; right: 40px; bottom: -10px; height: 2px; background: rgba(255,255,255,.5); border-radius: 2px; }
+.tvart i { position: absolute; right: 10px; top: 10px; width: 26px; height: 9px; border-radius: 9px; background: #fff; }
+.code { width: 100%; margin-top: 26px; min-height: 64px; border-radius: 18px; border: 1px solid var(--line); background: var(--surface); text-align: center; font-size: 32px; letter-spacing: .3em; font-variant-numeric: tabular-nums; outline: 0; padding-left: .3em; -webkit-user-select: text; user-select: text; }
+.code:focus { border-color: rgba(255,255,255,.4); }
+.err { color: var(--danger); font-size: 14px; min-height: 20px; margin: 10px 0 6px; }
+.small { color: var(--ink-3); font-size: 13px; margin-top: 18px; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+@media (min-width: 560px) { .view { max-width: 520px; margin: 0 auto; } .grid { grid-template-columns: repeat(3, 1fr); } }
+</style>
+</head>
+<body>
+<div class="tint" id="tint"></div>
+
+<!-- Íconos: una sola familia, trazo 1.8 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 010 11H11"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V20h5v-6h4v6h5V9.5"/></symbol>
+  <symbol id="i-kbd" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3v8"/><path d="M6.3 6.8a8 8 0 1011.4 0"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-spk" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 010 6M18 6.5a7.5 7.5 0 010 11"/></symbol>
+  <symbol id="i-spkoff" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5.5v13M16 5.5v13" stroke-width="3"/></symbol>
+  <symbol id="i-prev" viewBox="0 0 24 24"><path d="M18 6l-8 6 8 6z" fill="currentColor"/><path d="M6 6v12"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path d="M6 6l8 6-8 6z" fill="currentColor"/><path d="M18 6v12"/></symbol>
+  <symbol id="i-r10" viewBox="0 0 24 24"><path d="M4 12a8 8 0 102.3-5.6"/><path d="M4 4v4h4"/><path d="M10 10v5M13 10.5c0-.3.3-.5.8-.5h.4c.5 0 .8.2.8.5v4c0 .3-.3.5-.8.5h-.4c-.5 0-.8-.2-.8-.5z"/></symbol>
+  <symbol id="i-f30" viewBox="0 0 24 24"><path d="M20 12a8 8 0 11-2.3-5.6"/><path d="M20 4v4h-4"/><path d="M8.5 10h2l-1 2c.8 0 1.2.5 1.2 1.3s-.5 1.2-1.3 1.2H8.5M13 10.5c0-.3.3-.5.8-.5h.4c.5 0 .8.2.8.5v4c0 .3-.3.5-.8.5h-.4c-.5 0-.8-.2-.8-.5z"/></symbol>
+  <symbol id="i-remote" viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="5"/><circle cx="12" cy="8" r="2"/><path d="M10 14h.01M14 14h.01M10.5 17.5h3"/></symbol>
+  <symbol id="i-apps" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></symbol>
+  <symbol id="i-input" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8M10 9l3 2-3 2"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></symbol>
+  <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M2.5 9a14 14 0 0119 0M5.5 12.5a9.5 9.5 0 0113 0M8.5 16a5 5 0 017 0"/><path d="M12 19.5h.01"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M9 3.5h6M10 3.5v6l-3 4h10l-3-4v-6M12 13.5V21"/></symbol>
+  <symbol id="i-hide" viewBox="0 0 24 24"><path d="M3 3l18 18"/><path d="M10.6 6.1A9.8 9.8 0 0112 6c5 0 8.5 4.5 9.5 6a17 17 0 01-2.6 3.1M6.6 7.6C4.6 9 3.2 10.9 2.5 12c1 1.5 4.5 6 9.5 6a9.5 9.5 0 004.3-1"/></symbol>
+  <symbol id="i-show" viewBox="0 0 24 24"><path d="M2.5 12c1-1.5 4.5-6 9.5-6s8.5 4.5 9.5 6c-1 1.5-4.5 6-9.5 6s-8.5-4.5-9.5-6z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-enter" viewBox="0 0 24 24"><path d="M19 5v7a3 3 0 01-3 3H5"/><path d="M9 11l-4 4 4 4"/></symbol>
+  <symbol id="i-erase" viewBox="0 0 24 24"><path d="M8.5 5H20v14H8.5L3 12z"/><path d="M11.5 9.5l5 5M16.5 9.5l-5 5"/></symbol>
+  <symbol id="i-pad" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="2.5"/></symbol>
+  <symbol id="i-cross" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3"/><path d="M12 4.5v2M12 17.5v2M4.5 12h2M17.5 12h2"/></symbol>
+  <symbol id="i-broom" viewBox="0 0 24 24"><path d="M14 4l6 6M17 7l-5.5 5.5"/><path d="M11.5 12.5L4 20h7l3.5-3.5z"/></symbol>
+</svg>
+
+<!-- Vincular -->
+<main class="pair" id="pairView" hidden>
+  <div class="tvart" aria-hidden="true"><i></i></div>
+  <h2>Vincula este iPhone con tu TV</h2>
+  <p class="lead">En el inicio de la TV elige <b>Celular</b>, arriba a la derecha. Escanea el código con la cámara o escribe aquí los 6 números.</p>
+  <input class="code" id="pairCode" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="000000" aria-label="Código de la TV">
+  <div class="err" id="pairErr" role="alert"></div>
+  <button class="btn wide" id="pairBtn">Vincular</button>
+  <p class="small">El código solo sirve mientras se ve en la TV. Después, este iPhone guarda una llave propia y cada orden va firmada: nadie más en tu red puede usarla.</p>
+</main>
+
+<!-- Control -->
+<main class="view" id="tab-control" hidden>
+  <header class="top">
+    <div class="who"><h1 id="tvName">TV</h1><p id="onScreen">Conectando…</p></div>
+    <button class="round" id="powerBtn" aria-label="Apagar la TV"><svg class="i"><use href="#i-power"/></svg></button>
+  </header>
+  <div class="notice" id="offline" hidden><b>Sin conexión con la TV.</b> Revisa que el iPhone esté en el mismo Wi-Fi y que la TV esté encendida.</div>
+  <div class="hint" id="keysHint" hidden></div>
+
+  <section class="now" id="now" hidden>
+    <div class="art" id="nowArt"></div>
+    <div style="min-width:0">
+      <div class="t" id="nowTitle"></div>
+      <div class="s" id="nowSub"></div>
+      <div class="bar" id="nowBar"><i id="nowFill"></i></div>
+      <div class="time" id="nowTime"><span id="nowPos"></span><span id="nowLeft"></span></div>
+    </div>
+    <div class="ctl">
+      <button data-media="back10" id="nowBack" aria-label="Atrasar 10 segundos"><svg class="i"><use href="#i-r10"/></svg></button>
+      <button data-media="prev" aria-label="Anterior"><svg class="i"><use href="#i-prev"/></svg></button>
+      <button data-media="toggle" class="main" aria-label="Reproducir o pausar"><svg class="i" id="nowPlayIcon"><use href="#i-play"/></svg></button>
+      <button data-media="next" aria-label="Siguiente"><svg class="i"><use href="#i-next"/></svg></button>
+      <button data-media="fwd30" id="nowFwd" aria-label="Adelantar 30 segundos"><svg class="i"><use href="#i-f30"/></svg></button>
+    </div>
+  </section>
+
+  <div class="pad" id="pad" aria-label="Touchpad: desliza para moverte, toca para OK, mantén para el menú">
+    <div class="spot" id="spot"></div>
+    <svg class="i edge e-up"><use href="#i-up"/></svg>
+    <svg class="i edge e-down"><use href="#i-up"/></svg>
+    <svg class="i edge e-left"><use href="#i-up"/></svg>
+    <svg class="i edge e-right"><use href="#i-up"/></svg>
+    <div class="say">Desliza para moverte · Toca para OK<br>Mantén presionado para el menú</div>
+  </div>
+  <div class="dpad" id="dpad" hidden>
+    <button class="d-up" data-key="up" data-repeat aria-label="Arriba"><svg class="i"><use href="#i-up"/></svg></button>
+    <button class="d-down" data-key="down" data-repeat aria-label="Abajo"><svg class="i"><use href="#i-up"/></svg></button>
+    <button class="d-left" data-key="left" data-repeat aria-label="Izquierda"><svg class="i"><use href="#i-up"/></svg></button>
+    <button class="d-right" data-key="right" data-repeat aria-label="Derecha"><svg class="i"><use href="#i-up"/></svg></button>
+    <button class="d-ok" data-key="ok" data-long aria-label="OK">OK</button>
+  </div>
+  <div class="mode"><button id="modeBtn"><svg class="i"><use href="#i-cross"/></svg><span>Usar flechas</span></button></div>
+
+  <div class="keys">
+    <button class="key" data-key="back"><svg class="i"><use href="#i-back"/></svg>Atrás</button>
+    <button class="key" data-key="home"><svg class="i"><use href="#i-home"/></svg>Inicio</button>
+    <button class="key" id="kbdBtn"><svg class="i"><use href="#i-kbd"/></svg>Escribir</button>
+    <button class="key" data-key="playpause"><svg class="i"><use href="#i-play"/></svg>Pausa</button>
+  </div>
+  <div class="vol">
+    <button class="key" data-vol="down" data-repeat aria-label="Bajar volumen"><svg class="i"><use href="#i-minus"/></svg></button>
+    <button class="level" id="level" data-vol="mute" aria-label="Silenciar">
+      <svg class="i" id="volIcon"><use href="#i-spk"/></svg>
+      <span class="bar"><i id="volFill"></i></span>
+      <span class="n" id="volN">–</span>
+    </button>
+    <button class="key" data-vol="up" data-repeat aria-label="Subir volumen"><svg class="i"><use href="#i-plus"/></svg></button>
+  </div>
+</main>
+
+<!-- Apps -->
+<main class="view" id="tab-apps" hidden>
+  <h2>Apps</h2>
+  <p class="lead">Toca una para abrirla en la TV. Mantén presionada para fijarla o quitarla de la barra.</p>
+  <div class="chips">
+    <button class="chip" data-target="inputs"><svg class="i"><use href="#i-input"/></svg>Entradas</button>
+    <button class="chip" data-target="home"><svg class="i"><use href="#i-home"/></svg>Inicio</button>
+    <button class="chip" data-target="settings"><svg class="i"><use href="#i-gear"/></svg>Ajustes de la TV</button>
+    <button class="chip" data-target="wifi"><svg class="i"><use href="#i-wifi"/></svg>Wi-Fi</button>
+  </div>
+  <h3>Fijadas al principio de la barra</h3>
+  <div class="list" id="pinned"></div>
+  <h3>Todas</h3>
+  <label class="search" id="searchBox" hidden><svg class="i"><use href="#i-search"/></svg><input id="search" type="search" placeholder="Buscar app" autocomplete="off"></label>
+  <div class="grid" id="grid"></div>
+</main>
+
+<!-- Ajustes -->
+<main class="view" id="tab-settings" hidden>
+  <h2>Ajustes</h2>
+  <p class="lead">Los cambios se ven en la TV al momento.</p>
+
+  <h3>Inicio</h3>
+  <div class="list">
+    <label class="field"><span>Tu nombre en el saludo</span><input id="greet" maxlength="24" placeholder="Por ejemplo, Mike" autocomplete="given-name"></label>
+    <label class="field" style="border-top:1px solid var(--line)"><span>Nombre de esta TV</span><input id="tvInput" maxlength="24" placeholder="Sala"></label>
+  </div>
+  <p class="lead" id="greetPreview" style="font-size:14px;margin-top:8px"></p>
+
+  <h3>Memoria</h3>
+  <div class="list mem">
+    <div id="memText">–</div>
+    <div class="bar"><i id="memFill"></i></div>
+    <button class="btn ghost wide" id="cleanBtn"><svg class="i"><use href="#i-broom"/></svg>Cerrar apps en segundo plano</button>
+  </div>
+
+  <h3>Flechas y teclado</h3>
+  <div class="list"><div class="state"><span class="dot" id="keysDot"></span><div><div id="keysTitle">–</div><p id="keysText"></p></div></div></div>
+
+  <h3>Celulares vinculados</h3>
+  <div class="list" id="devices"></div>
+  <div style="margin-top:14px"><button class="btn ghost wide danger" id="unpairBtn">Desvincular este iPhone</button></div>
+  <div class="hint" id="installHint" hidden>Para abrirlo como app: toca <b>Compartir</b> y luego <b>Agregar a inicio</b>.</div>
+</main>
+
+<nav class="tabs" id="tabs" role="tablist" hidden>
+  <button role="tab" data-tab="control" aria-selected="true"><svg class="i"><use href="#i-remote"/></svg>Control</button>
+  <button role="tab" data-tab="apps" aria-selected="false"><svg class="i"><use href="#i-apps"/></svg>Apps</button>
+  <button role="tab" data-tab="settings" aria-selected="false"><svg class="i"><use href="#i-sliders"/></svg>Ajustes</button>
+</nav>
+
+<div class="scrim" id="scrim" hidden></div>
+<section class="sheet" id="kbdSheet" hidden aria-label="Escribir en la TV">
+  <div class="grab"></div>
+  <h4>Escribir en la TV</h4>
+  <p>Lo que escribas aparece en el buscador que tengas abierto en la TV.</p>
+  <div class="typebox">
+    <input id="typeInput" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" placeholder="Busca una película, una serie…">
+    <button class="round" id="eraseBtn" aria-label="Borrar en la TV"><svg class="i"><use href="#i-erase"/></svg></button>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
+    <button class="btn ghost" id="kbdClose">Listo</button>
+    <button class="btn" id="kbdEnter"><svg class="i"><use href="#i-enter"/></svg>Buscar</button>
+  </div>
+</section>
+<section class="sheet" id="menuSheet" hidden>
+  <div class="grab"></div>
+  <h4 id="menuTitle"></h4>
+  <p id="menuSub"></p>
+  <div class="actions" id="menuActions"></div>
+</section>
+
+<div class="toast" id="toast" role="status"></div>
+<label id="hapticLabel" style="position:absolute;left:-9999px;top:0"><input type="checkbox" switch id="hapticBox" tabindex="-1" aria-hidden="true"></label>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const STORE = 'slimtv-remote';
+
+/* ---------- SHA-256 y HMAC (crypto.subtle no existe en http://, así que va aquí) ---------- */
+const K = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+  0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+  0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+  0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+  0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+  0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+  0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+  0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+const ror = (x, n) => (x >>> n) | (x << (32 - n));
+function sha256(bytes) {
+  const len = bytes.length, total = ((len + 9 + 63) >> 6) << 6;
+  const m = new Uint8Array(total); m.set(bytes); m[len] = 0x80;
+  const dv = new DataView(m.buffer);
+  dv.setUint32(total - 4, (len * 8) >>> 0); dv.setUint32(total - 8, Math.floor(len / 0x20000000));
+  const h = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+  const w = new Uint32Array(64);
+  for (let off = 0; off < total; off += 64) {
+    for (let t = 0; t < 16; t++) w[t] = dv.getUint32(off + t * 4);
+    for (let t = 16; t < 64; t++) {
+      const a = w[t - 15], b = w[t - 2];
+      w[t] = (w[t - 16] + (ror(a, 7) ^ ror(a, 18) ^ (a >>> 3)) + w[t - 7] + (ror(b, 17) ^ ror(b, 19) ^ (b >>> 10))) | 0;
+    }
+    let [a, b, c, d, e, f, g, k] = h;
+    for (let t = 0; t < 64; t++) {
+      const t1 = (k + (ror(e, 6) ^ ror(e, 11) ^ ror(e, 25)) + ((e & f) ^ (~e & g)) + K[t] + w[t]) | 0;
+      const t2 = ((ror(a, 2) ^ ror(a, 13) ^ ror(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+      k = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+    }
+    h[0] = (h[0] + a) | 0; h[1] = (h[1] + b) | 0; h[2] = (h[2] + c) | 0; h[3] = (h[3] + d) | 0;
+    h[4] = (h[4] + e) | 0; h[5] = (h[5] + f) | 0; h[6] = (h[6] + g) | 0; h[7] = (h[7] + k) | 0;
+  }
+  const out = new Uint8Array(32), ov = new DataView(out.buffer);
+  h.forEach((v, i) => ov.setUint32(i * 4, v >>> 0));
+  return out;
+}
+function hmac(key, msg) {
+  if (key.length > 64) key = sha256(key);
+  const ip = new Uint8Array(64 + msg.length), op = new Uint8Array(96);
+  for (let i = 0; i < 64; i++) { const k = key[i] || 0; ip[i] = k ^ 0x36; op[i] = k ^ 0x5c; }
+  ip.set(msg, 64); op.set(sha256(ip), 64);
+  return sha256(op);
+}
+const enc = new TextEncoder();
+const hex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+/* ---------- Credenciales ---------- */
+let cred = null, skew = 0;
+function loadCred() {
+  try { cred = JSON.parse(localStorage.getItem(STORE) || 'null'); } catch (e) { cred = null; }
+  // La app de la pantalla de inicio tiene su propio almacenamiento: la llave llega en el #k= del enlace guardado.
+  const m = location.hash.match(/k=([0-9a-f]{16})\.([A-Za-z0-9_-]+)/);
+  if (!cred && m) {
+    cred = { id: m[1], key: m[2].replace(/-/g, '+').replace(/_/g, '/') };
+    saveCred();
+  }
+  if (cred) cred.bytes = b64(cred.key);
+}
+function saveCred() {
+  try { localStorage.setItem(STORE, JSON.stringify({ id: cred.id, key: cred.key, tv: cred.tv })); } catch (e) {}
+}
+const standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+function keepCredInUrl() {
+  // Solo en Safari: así "Agregar a inicio" se lleva la llave a la app. El "#" nunca viaja por la red.
+  if (standalone || !cred) return;
+  const k = cred.key.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  history.replaceState(null, '', '/#k=' + cred.id + '.' + k);
+}
+
+/* ---------- API firmada ---------- */
+class ApiError extends Error { constructor(status, data) { super(data && data.error || String(status)); this.status = status; this.data = data || {}; } }
+function nonce() { const b = new Uint8Array(16); crypto.getRandomValues(b); return hex(b); }
+async function api(method, path, body, retry = true, as = 'json') {
+  const text = body === undefined ? '' : JSON.stringify(body);
+  const ts = String(Date.now() + skew), n = nonce();
+  const sig = hex(hmac(cred.bytes, enc.encode(method + '\n' + path + '\n' + ts + '\n' + n + '\n' + text)));
+  let res;
+  try {
+    res = await fetch(path, { method, headers: { 'X-Slim-Auth': cred.id + '.' + ts + '.' + n + '.' + sig,
+      ...(text ? { 'Content-Type': 'application/json' } : {}) }, body: text || undefined, cache: 'no-store' });
+  } catch (e) { setOnline(false); throw new ApiError(0, { error: 'network' }); }
+  setOnline(true);
+  if (as === 'blob' && res.ok) return res.blob();
+  let data = null;
+  try { data = await res.json(); } catch (e) {}
+  if (res.status === 401 && data && data.error === 'clock' && retry) {
+    skew = data.time - Date.now();
+    return api(method, path, body, false, as);
+  }
+  if (res.status === 401 && data && (data.error === 'unpaired')) { forget(); throw new ApiError(401, data); }
+  if (!res.ok) throw new ApiError(res.status, data);
+  return data;
+}
+
+/* ---------- Sensaciones ---------- */
+function haptic() {
+  // Safari 17.4+ da un toque háptico al cambiar un <input switch>; en otros navegadores, vibrate.
+  try { $('hapticLabel').click(); } catch (e) {}
+  if (navigator.vibrate) navigator.vibrate(8);
+}
+let toastTimer;
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+/* ---------- Envío de teclas en orden ---------- */
+let chain = Promise.resolve();
+function queue(fn) { chain = chain.then(fn, fn).catch(onActionError); return chain; }
+function onActionError(e) {
+  if (!(e instanceof ApiError)) return;
+  if (e.status === 409 && e.data.keys) { renderKeys(e.data.keys, true); return; }
+  if (e.status === 0) return;
+  toast('No se pudo hacer eso en la TV');
+}
+const press = (key, long = false) => queue(() => api('POST', '/api/key', { key, long }));
+
+/* ---------- Vincular ---------- */
+async function pair(code) {
+  const err = $('pairErr'), btn = $('pairBtn');
+  err.textContent = '';
+  code = (code || '').replace(/\D/g, '');
+  if (code.length !== 6) { err.textContent = 'Escribe los 6 números que aparecen en la TV.'; return; }
+  btn.disabled = true; btn.textContent = 'Vinculando…';
+  try {
+    const name = /iPad/.test(navigator.userAgent) ? 'iPad' : /iPhone/.test(navigator.userAgent) ? 'iPhone' : 'Celular';
+    const res = await fetch('/api/pair', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, name }) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      err.textContent = {
+        code: 'Ese código no coincide. Revisa el que se ve en la TV.',
+        expired: 'El código ya no es válido. En la TV elige Celular de nuevo.',
+        too_many: 'Demasiados intentos. En la TV elige Celular de nuevo.',
+        slow_down: 'Demasiados intentos. Espera un minuto.'
+      }[data.error] || 'No se pudo vincular. Intenta otra vez.';
+      return;
+    }
+    cred = { id: data.id, key: data.key, tv: data.tv, bytes: b64(data.key) };
+    saveCred();
+    haptic();
+    start();
+    toast('Listo. Ya controlas ' + (data.tv || 'la TV'));
+  } catch (e) {
+    err.textContent = 'No hay conexión con la TV. ¿Están en el mismo Wi-Fi?';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Vincular';
+  }
+}
+function showPair() {
+  stopPolling();
+  ['tab-control', 'tab-apps', 'tab-settings', 'tabs'].forEach((id) => $(id).hidden = true);
+  $('pairView').hidden = false;
+  document.documentElement.style.setProperty('--tint', '#3A4A66');
+}
+function forget() {
+  try { localStorage.removeItem(STORE); } catch (e) {}
+  cred = null;
+  history.replaceState(null, '', '/');
+  showPair();
+}
+
+/* ---------- Pestañas ---------- */
+let tab = 'control';
+function selectTab(name) {
+  tab = name;
+  document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
+  ['control', 'apps', 'settings'].forEach((t) => $('tab-' + t).hidden = t !== name);
+  window.scrollTo(0, 0);
+  if (name === 'apps') loadApps();
+  if (name === 'settings') loadSettings();
+  poll();
+}
+
+/* ---------- Estado de la TV ---------- */
+let pollTimer = null, last = null, artId = null, online = true;
+function setOnline(v) {
+  if (v === online) return;
+  online = v; $('offline').hidden = v;
+}
+async function poll() {
+  clearTimeout(pollTimer);
+  if (!cred || document.hidden) return;
+  try { render(await api('GET', '/api/state')); } catch (e) {}
+  pollTimer = setTimeout(poll, tab === 'control' ? 1000 : 3000);
+}
+function stopPolling() { clearTimeout(pollTimer); pollTimer = null; }
+function fmt(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = String(s % 60).padStart(2, '0');
+  return h ? h + ':' + String(m).padStart(2, '0') + ':' + x : m + ':' + x;
+}
+function render(s) {
+  last = s;
+  $('tvName').textContent = s.tv || 'TV';
+  if (cred.tv !== s.tv) { cred.tv = s.tv; saveCred(); }
+  const app = s.app;
+  $('onScreen').textContent = !app ? 'Encendida' : app.home ? 'En el inicio' : 'Viendo ' + app.label;
+  const color = (s.media && s.media.playing && s.media.color) || (app && app.color) || '#3A4A66';
+  document.documentElement.style.setProperty('--tint', color);
+
+  const m = s.media;
+  $('now').hidden = !m || !m.title;
+  if (m && m.title) {
+    $('nowTitle').textContent = m.title;
+    $('nowSub').textContent = [m.sub, m.app].filter(Boolean).join(' · ');
+    $('nowPlayIcon').firstElementChild.setAttribute('href', m.playing ? '#i-pause' : '#i-play');
+    const has = m.dur > 0;
+    $('nowBar').hidden = $('nowTime').hidden = !has;
+    if (has) {
+      $('nowFill').style.width = Math.min(100, 100 * m.pos / m.dur) + '%';
+      $('nowPos').textContent = fmt(m.pos);
+      $('nowLeft').textContent = '-' + fmt(m.dur - m.pos);
+    }
+    $('nowBack').hidden = $('nowFwd').hidden = !m.seek;
+    if (m.art !== artId) {
+      artId = m.art;
+      if (!m.art) $('nowArt').style.backgroundImage = '';
+      else api('GET', '/api/art', undefined, true, 'blob').then((b) => {
+        $('nowArt').style.backgroundImage = 'url(' + URL.createObjectURL(b) + ')';
+      }).catch(() => {});
+    }
+  }
+
+  const v = s.volume;
+  if (v) {
+    $('volFill').style.width = (v.max ? 100 * v.level / v.max : 0) + '%';
+    $('volN').textContent = v.muted ? '0' : v.level;
+    $('level').classList.toggle('muted', v.muted);
+    $('volIcon').firstElementChild.setAttribute('href', v.muted ? '#i-spkoff' : '#i-spk');
+  }
+  renderKeys(s.keys, false);
+  if (s.ram) {
+    $('memText').textContent = 'Libres ' + s.ram.free + ' MB de ' + s.ram.total + ' MB';
+    $('memFill').style.width = (100 * (1 - s.ram.free / s.ram.total)) + '%';
+  }
+}
+function renderKeys(k, fromPress) {
+  if (!k) return;
+  const ok = k.state === 'ready', waiting = k.state === 'waiting_approval' || k.state === 'connecting';
+  const hint = $('keysHint');
+  if (ok) hint.hidden = true;
+  else if (fromPress || !hint.hidden || k.state === 'unavailable') {
+    hint.hidden = false;
+    hint.innerHTML = '';
+    const b = document.createElement('b');
+    b.textContent = waiting ? 'Falta un paso en la TV. ' : 'Las flechas y el teclado están apagados. ';
+    hint.append(b, waiting ? 'Si aparece «¿Permitir la depuración?», marca «Permitir siempre» y acepta con el control de la TV.'
+      : 'En la TV, activa Ajustes › Sistema › Opciones de desarrollador › Depuración USB. El volumen, la música y las apps funcionan igual.');
+  }
+  $('keysDot').className = 'dot ' + (ok ? 'ok' : waiting ? 'warn' : '');
+  $('keysTitle').textContent = ok ? 'Activos' : waiting ? 'Esperando permiso en la TV' : 'Apagados';
+  $('keysText').textContent = ok ? 'El touchpad, las flechas y el teclado mandan teclas a cualquier app.'
+    : waiting ? 'Acepta «¿Permitir la depuración?» en la TV y marca «Permitir siempre».'
+    : 'Activa la depuración USB en las opciones de desarrollador de la TV. ' + (k.detail || '');
+}
+
+/* ---------- Touchpad ---------- */
+const pad = $('pad'), spot = $('spot');
+const STEP = 46, HOLD_MS = 520;
+let g = null;
+function flash(dir) {
+  const el = pad.querySelector('.e-' + dir);
+  el.classList.add('hit'); setTimeout(() => el.classList.remove('hit'), 140);
+}
+function fire(dir) { haptic(); flash(dir); press(dir); }
+pad.addEventListener('pointerdown', (e) => {
+  pad.setPointerCapture(e.pointerId);
+  const r = pad.getBoundingClientRect();
+  g = { x: e.clientX, y: e.clientY, moved: false, long: false, dir: null, r };
+  spot.style.transform = 'translate(' + (e.clientX - r.left) + 'px,' + (e.clientY - r.top) + 'px)';
+  pad.classList.add('down', 'used');
+  g.timer = setTimeout(() => { if (g && !g.moved) { g.long = true; haptic(); press('ok', true); } }, HOLD_MS);
+});
+pad.addEventListener('pointermove', (e) => {
+  if (!g) return;
+  spot.style.transform = 'translate(' + (e.clientX - g.r.left) + 'px,' + (e.clientY - g.r.top) + 'px)';
+  const dx = e.clientX - g.x, dy = e.clientY - g.y;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < (g.moved ? STEP : 26)) return;
+  // Cada tramo deslizado es una pulsación: deslizar largo recorre una lista.
+  const dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+  g.moved = true; clearTimeout(g.timer); clearInterval(g.rep);
+  g.x = e.clientX; g.y = e.clientY; g.dir = dir;
+  fire(dir);
+  // Dedo quieto después de deslizar: sigue avanzando en esa dirección.
+  g.rep = setTimeout(() => { g && (g.rep = setInterval(() => g && fire(g.dir), 140)); }, 380);
+});
+function endPad(e) {
+  if (!g) return;
+  clearTimeout(g.timer); clearTimeout(g.rep); clearInterval(g.rep);
+  if (!g.moved && !g.long && e.type === 'pointerup') { haptic(); press('ok'); }
+  g = null; pad.classList.remove('down');
+}
+pad.addEventListener('pointerup', endPad);
+pad.addEventListener('pointercancel', endPad);
+
+/* ---------- Botones con tecla, repetición y pulsación larga ---------- */
+function bindPress(el, action) {
+  let rep = null, hold = null, longDone = false;
+  const stop = () => { clearTimeout(hold); clearInterval(rep); rep = hold = null; };
+  el.addEventListener('pointerdown', (e) => {
+    e.preventDefault(); longDone = false;
+    if (el.hasAttribute('data-long')) {
+      hold = setTimeout(() => { longDone = true; haptic(); action(true); }, HOLD_MS);
+      return;
+    }
+    haptic(); action(false);
+    if (el.hasAttribute('data-repeat')) hold = setTimeout(() => { rep = setInterval(() => action(false), 120); }, 420);
+  });
+  el.addEventListener('pointerup', () => {
+    if (el.hasAttribute('data-long') && !longDone && hold) { haptic(); action(false); }
+    stop();
+  });
+  el.addEventListener('pointercancel', stop);
+  el.addEventListener('pointerleave', stop);
+  el.addEventListener('contextmenu', (e) => e.preventDefault());
+}
+document.querySelectorAll('[data-key]').forEach((el) => bindPress(el, (long) => press(el.dataset.key, long)));
+document.querySelectorAll('[data-vol]').forEach((el) => bindPress(el, () => queue(async () => {
+  await api('POST', '/api/volume', { action: el.dataset.vol }); poll();
+})));
+document.querySelectorAll('[data-media]').forEach((el) => bindPress(el, () => queue(async () => {
+  await api('POST', '/api/media', { action: el.dataset.media }); setTimeout(poll, 250);
+})));
+
+let mode = localStorage.getItem(STORE + '-mode') || 'pad';
+function applyMode() {
+  $('pad').hidden = mode !== 'pad'; $('dpad').hidden = mode === 'pad';
+  $('modeBtn').querySelector('span').textContent = mode === 'pad' ? 'Usar flechas' : 'Usar touchpad';
+  $('modeBtn').querySelector('use').setAttribute('href', mode === 'pad' ? '#i-cross' : '#i-pad');
+}
+$('modeBtn').addEventListener('click', () => {
+  mode = mode === 'pad' ? 'dpad' : 'pad';
+  try { localStorage.setItem(STORE + '-mode', mode); } catch (e) {}
+  applyMode();
+});
+
+$('powerBtn').addEventListener('click', () => openMenu('Apagar la TV', 'Se apaga como con el botón del control. Para encenderla, usa el control de la TV.', [
+  ['power', 'Apagar ahora', async () => { await api('POST', '/api/system', { action: 'sleep' }); toast('Apagando la TV'); }]
+]));
+
+/* ---------- Hojas ---------- */
+let openSheet = null;
+function showSheet(el) {
+  openSheet = el; $('scrim').hidden = false; el.hidden = false;
+  requestAnimationFrame(() => { $('scrim').classList.add('open'); el.classList.add('open'); });
+}
+function closeSheet() {
+  const el = openSheet; if (!el) return;
+  openSheet = null; $('scrim').classList.remove('open'); el.classList.remove('open');
+  setTimeout(() => { el.hidden = true; if (!openSheet) $('scrim').hidden = true; }, 280);
+  $('typeInput').blur();
+}
+$('scrim').addEventListener('click', closeSheet);
+function openMenu(title, sub, items) {
+  $('menuTitle').textContent = title; $('menuSub').textContent = sub || ''; $('menuSub').hidden = !sub;
+  const box = $('menuActions'); box.textContent = '';
+  for (const [icon, label, fn, danger] of items) {
+    const b = document.createElement('button');
+    b.innerHTML = '<svg class="i"><use href="#i-' + icon + '"/></svg>';
+    b.append(label);
+    if (danger) b.classList.add('danger');
+    b.addEventListener('click', () => { haptic(); closeSheet(); queue(fn); });
+    box.append(b);
+  }
+  showSheet($('menuSheet'));
+}
+
+/* ---------- Teclado: lo que escribes aparece en la TV al instante ---------- */
+let typed = '';
+$('kbdBtn').addEventListener('click', () => {
+  typed = ''; $('typeInput').value = '';
+  showSheet($('kbdSheet'));
+  setTimeout(() => $('typeInput').focus(), 60);
+});
+$('typeInput').addEventListener('input', () => {
+  const now = $('typeInput').value;
+  let i = 0;
+  while (i < typed.length && i < now.length && typed[i] === now[i]) i++;
+  const del = typed.length - i, text = now.slice(i);
+  typed = now;
+  if (del || text) queue(() => api('POST', '/api/text', { del, text }));
+});
+$('typeInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('kbdEnter').click(); } });
+$('kbdEnter').addEventListener('click', () => { haptic(); queue(() => api('POST', '/api/text', { enter: true })); closeSheet(); });
+$('kbdClose').addEventListener('click', closeSheet);
+bindPress($('eraseBtn'), () => {
+  typed = typed.slice(0, -1); $('typeInput').value = typed;
+  queue(() => api('POST', '/api/text', { del: 1 }));
+});
+$('eraseBtn').setAttribute('data-repeat', '');
+
+/* ---------- Apps ---------- */
+let apps = [], icons = new Map();
+async function loadApps() {
+  try { apps = (await api('GET', '/api/apps')).apps; } catch (e) { return; }
+  renderApps();
+}
+function iconFor(pkg, el) {
+  if (icons.has(pkg)) { el.style.backgroundImage = 'url(' + icons.get(pkg) + ')'; return; }
+  iconQueue.push([pkg, el]); pumpIcons();
+}
+const iconQueue = []; let iconBusy = 0;
+function pumpIcons() {
+  while (iconBusy < 3 && iconQueue.length) {
+    const [pkg, el] = iconQueue.shift();
+    if (icons.has(pkg)) { el.style.backgroundImage = 'url(' + icons.get(pkg) + ')'; continue; }
+    iconBusy++;
+    api('GET', '/api/icon?pkg=' + pkg, undefined, true, 'blob').then((b) => {
+      const url = URL.createObjectURL(b); icons.set(pkg, url);
+      document.querySelectorAll('[data-icon="' + pkg + '"]').forEach((x) => x.style.backgroundImage = 'url(' + url + ')');
+    }).catch(() => {}).finally(() => { iconBusy--; pumpIcons(); });
+  }
+}
+function renderApps() {
+  const q = $('search').value.trim().toLowerCase();
+  $('searchBox').hidden = apps.length < 12;
+  const grid = $('grid'); grid.textContent = '';
+  for (const a of apps.filter((a) => !q || a.label.toLowerCase().includes(q))) {
+    const b = document.createElement('button'); b.className = 'app';
+    const ban = document.createElement('div'); ban.className = 'ban'; ban.dataset.icon = a.pkg; ban.style.setProperty('--c', a.color);
+    const lbl = document.createElement('div'); lbl.className = 'lbl';
+    const name = document.createElement('b'); name.textContent = a.label; lbl.append(name);
+    if (a.excluded) lbl.append(' · oculta');
+    b.append(ban, lbl); grid.append(b);
+    iconFor(a.pkg, ban);
+    let hold = null, held = false;
+    b.addEventListener('pointerdown', () => { held = false; hold = setTimeout(() => { held = true; haptic(); appMenu(a); }, HOLD_MS); });
+    b.addEventListener('pointerup', () => { clearTimeout(hold); });
+    b.addEventListener('pointerleave', () => clearTimeout(hold));
+    b.addEventListener('pointercancel', () => clearTimeout(hold));
+    b.addEventListener('contextmenu', (e) => e.preventDefault());
+    b.addEventListener('click', () => { if (held) return; haptic(); launch({ pkg: a.pkg }, 'Abriendo ' + a.label); });
+  }
+  if (!grid.children.length) {
+    const p = document.createElement('p'); p.className = 'empty';
+    p.textContent = q ? 'Ninguna app se llama así.' : 'No encontré apps en la TV.';
+    grid.append(p);
+  }
+  const pinned = apps.filter((a) => a.pinned >= 0).sort((x, y) => x.pinned - y.pinned);
+  const list = $('pinned'); list.textContent = '';
+  if (!pinned.length) {
+    const p = document.createElement('p'); p.className = 'empty';
+    p.textContent = 'La barra se ordena sola por lo que más usas. Mantén presionada una app para fijarla aquí.';
+    list.append(p);
+  }
+  pinned.forEach((a, i) => {
+    const row = document.createElement('div'); row.className = 'row';
+    const mini = document.createElement('div'); mini.className = 'mini'; mini.dataset.icon = a.pkg; mini.style.setProperty('--c', a.color); iconFor(a.pkg, mini);
+    const grow = document.createElement('div'); grow.className = 'grow';
+    const t = document.createElement('div'); t.textContent = a.label; grow.append(t);
+    row.append(mini, grow,
+      iconButton('up', 'Subir', i === 0, () => movePin(pinned, i, -1)),
+      iconButton('down', 'Bajar', i === pinned.length - 1, () => movePin(pinned, i, 1)),
+      iconButton('x', 'Quitar de fijadas', false, () => setLayout(pinned.filter((x) => x !== a), null, a.label + ' ya no está fijada')));
+    list.append(row);
+  });
+}
+function iconButton(icon, label, disabled, fn) {
+  const b = document.createElement('button'); b.className = 'ic'; b.disabled = disabled; b.setAttribute('aria-label', label);
+  b.innerHTML = '<svg class="i"><use href="#i-' + icon + '"/></svg>';
+  b.addEventListener('click', () => { haptic(); fn(); });
+  return b;
+}
+function movePin(pinned, i, d) {
+  const list = pinned.slice(); const [x] = list.splice(i, 1); list.splice(i + d, 0, x);
+  setLayout(list, null);
+}
+async function setLayout(pinned, excluded, msg) {
+  const body = {};
+  if (pinned) body.pinned = pinned.map((a) => a.pkg);
+  if (excluded) body.excluded = excluded;
+  try { await api('POST', '/api/layout', body); if (msg) toast(msg); } catch (e) { onActionError(e); }
+  loadApps();
+}
+function appMenu(a) {
+  const pinned = apps.filter((x) => x.pinned >= 0).sort((x, y) => x.pinned - y.pinned);
+  const excluded = apps.filter((x) => x.excluded).map((x) => x.pkg);
+  const isPinned = a.pinned >= 0;
+  openMenu(a.label, null, [
+    ['play', 'Abrir en la TV', () => launch({ pkg: a.pkg }, 'Abriendo ' + a.label)],
+    isPinned ? ['x', 'Quitar de fijadas', () => setLayout(pinned.filter((x) => x !== a), null, a.label + ' ya no está fijada')]
+      : ['pin', 'Fijar al principio de la barra', () => setLayout(pinned.concat(a), excluded.filter((p) => p !== a.pkg), a.label + ' quedó fijada')],
+    a.excluded ? ['show', 'Mostrar en la barra', () => setLayout(null, excluded.filter((p) => p !== a.pkg), a.label + ' vuelve a la barra')]
+      : ['hide', 'Quitar de la barra', () => setLayout(pinned.filter((x) => x !== a), excluded.concat(a.pkg), a.label + ' ya no aparece en la barra')]
+  ]);
+}
+async function launch(body, msg) {
+  try { await api('POST', '/api/launch', body); toast(msg); setTimeout(poll, 600); }
+  catch (e) { toast('La TV no pudo abrir eso'); }
+}
+document.querySelectorAll('[data-target]').forEach((b) => b.addEventListener('click', () => {
+  haptic(); launch({ target: b.dataset.target }, 'Abriendo ' + b.textContent.trim());
+}));
+$('search').addEventListener('input', renderApps);
+
+/* ---------- Ajustes ---------- */
+async function loadSettings() {
+  let d;
+  try { d = await api('GET', '/api/devices'); } catch (e) { return; }
+  if (document.activeElement !== $('greet')) $('greet').value = d.greet || '';
+  if (document.activeElement !== $('tvInput')) $('tvInput').value = d.tv || '';
+  previewGreet();
+  const box = $('devices'); box.textContent = '';
+  d.devices.sort((a, b) => (b.me - a.me) || (b.seen - a.seen)).forEach((dev) => {
+    const row = document.createElement('div'); row.className = 'row';
+    const grow = document.createElement('div'); grow.className = 'grow';
+    const t = document.createElement('div'); t.textContent = dev.name + (dev.me ? ' (este)' : '');
+    const s = document.createElement('div'); s.className = 'sub'; s.textContent = dev.me ? 'Conectado ahora' : 'Usado ' + ago(dev.seen);
+    grow.append(t, s); row.append(grow);
+    if (!dev.me) row.append(iconButton('x', 'Quitar ' + dev.name, false, async () => {
+      await api('POST', '/api/devices/remove', { id: dev.id }); toast(dev.name + ' ya no controla la TV'); loadSettings();
+    }));
+    box.append(row);
+  });
+  $('installHint').hidden = standalone;
+}
+function ago(t) {
+  const m = Math.floor((Date.now() - t) / 60000);
+  if (m < 2) return 'hace un momento'; if (m < 60) return 'hace ' + m + ' min';
+  const h = Math.floor(m / 60); if (h < 24) return 'hace ' + h + ' h';
+  const d = Math.floor(h / 24); return d === 1 ? 'ayer' : 'hace ' + d + ' días';
+}
+function previewGreet() {
+  const h = new Date().getHours();
+  const g = h < 6 ? 'Buenas noches' : h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
+  const n = $('greet').value.trim();
+  $('greetPreview').textContent = 'En la TV se verá: «' + g + (n ? ', ' + n : '') + '»';
+}
+let prefTimer;
+function savePrefs() {
+  clearTimeout(prefTimer);
+  prefTimer = setTimeout(() => queue(async () => {
+    await api('POST', '/api/prefs', { greet: $('greet').value.trim(), tv: $('tvInput').value.trim() });
+    poll();
+  }), 500);
+}
+$('greet').addEventListener('input', () => { previewGreet(); savePrefs(); });
+$('tvInput').addEventListener('input', savePrefs);
+$('cleanBtn').addEventListener('click', async () => {
+  haptic(); const b = $('cleanBtn'); b.disabled = true;
+  try {
+    const r = await api('POST', '/api/system', { action: 'clean' });
+    toast(r.freed > 0 ? 'Se liberaron ' + r.freed + ' MB' : 'Ya estaba todo cerrado');
+    poll();
+  } catch (e) { onActionError(e); } finally { b.disabled = false; }
+});
+$('unpairBtn').addEventListener('click', () => openMenu('Desvincular este iPhone', 'Para volver a usarlo tendrás que escanear el código de la TV otra vez.', [
+  ['x', 'Desvincular', async () => {
+    try { await api('POST', '/api/devices/remove', { id: cred.id }); } catch (e) {}
+    forget();
+  }, true]
+]));
+
+/* ---------- Arranque ---------- */
+document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => { haptic(); selectTab(b.dataset.tab); }));
+document.addEventListener('visibilitychange', () => { if (!document.hidden && cred) poll(); });
+$('pairBtn').addEventListener('click', () => pair($('pairCode').value));
+$('pairCode').addEventListener('input', (e) => {
+  const v = e.target.value.replace(/\D/g, '').slice(0, 6);
+  e.target.value = v;
+  if (v.length === 6) pair(v);
+});
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+
+function start() {
+  $('pairView').hidden = true;
+  $('tabs').hidden = false;
+  keepCredInUrl();
+  applyMode();
+  selectTab('control');
+}
+loadCred();
+const code = location.hash.match(/c=(\d{6})/);
+if (cred) start();
+else {
+  showPair();
+  if (code) { history.replaceState(null, '', '/'); $('pairCode').value = code[1]; pair(code[1]); }
+}
+</script>
+</body>
+</html>
