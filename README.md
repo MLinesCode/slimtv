@@ -86,6 +86,10 @@ pantalla de inicio. No hace falta la PC ni instalar nada de la App Store.
    Eso activa las flechas, OK, Atrás y el teclado (ver abajo).
 4. En Safari: **Compartir → Agregar a inicio** para tenerlo como app.
 
+¿Sin control físico? Mientras no haya ningún celular vinculado, la TV muestra el código sola al encender,
+así que basta el botón de encendido. Atrás lo oculta hasta el siguiente reinicio. El aviso del paso 3 sí
+necesita un control, un teclado USB o la app Google TV; sin él funcionan volumen, apps y ajustes, pero no las flechas.
+
 | En la TV: código para vincular | En el iPhone, sin cámara |
 |---|---|
 | ![Código QR y 6 números en la TV](docs/img/control-tv-vincular.png) | <img src="docs/img/control-celular-vincular.png" alt="Pantalla para escribir el código en el iPhone" width="220"> |

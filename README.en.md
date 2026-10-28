@@ -71,6 +71,10 @@ home screen. No PC, nothing from the App Store.
    arrows, OK, Back and the keyboard.
 4. In Safari: **Share → Add to Home Screen**.
 
+No physical remote? While no phone is paired, the TV shows the code by itself when it turns on, so the
+power button is enough. Back hides it until the next restart. The prompt in step 3 still needs a remote, a USB
+keyboard or the Google TV app; without it volume, apps and settings work, but not the arrows.
+
 | On the TV: pairing code | On the iPhone, without camera |
 |---|---|
 | ![QR and 6 digits on the TV](docs/img/control-tv-vincular.png) | <img src="docs/img/control-celular-vincular.png" alt="Typing the code on the iPhone" width="220"> |

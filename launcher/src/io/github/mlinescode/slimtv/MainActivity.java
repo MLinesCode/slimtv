@@ -142,6 +142,9 @@ public class MainActivity extends Activity {
     private ImageView pairQr;
     private TextView pairTitle, pairStep, pairUrl, pairCode, pairFoot;
     private long pairUntil;
+    private boolean resumed;
+    /** Atrás oculta el código que se abrió solo; no vuelve hasta que la TV se reinicie. */
+    private static boolean autoPairDismissed;
 
     private Shelf rowScroll;
     private LinearLayout row;
@@ -164,7 +167,7 @@ public class MainActivity extends Activity {
     };
 
     private final ConnectivityManager.NetworkCallback networkCallback = new ConnectivityManager.NetworkCallback() {
-        @Override public void onAvailable(Network n) { handler.post(MainActivity.this::updateWifi); }
+        @Override public void onAvailable(Network n) { handler.post(MainActivity.this::updateWifi); handler.post(MainActivity.this::autoPair); }
         @Override public void onLost(Network n) { handler.post(MainActivity.this::updateWifi); }
     };
 
@@ -528,10 +531,13 @@ public class MainActivity extends Activity {
         updateWifi();
         wallpaper.start();
         startMusic();
+        resumed = true;
+        autoPair();
     }
 
     @Override protected void onPause() {
         super.onPause();
+        resumed = false;
         handler.removeCallbacks(tick);
         wallpaper.stop();
         stopMusic();
@@ -572,7 +578,10 @@ public class MainActivity extends Activity {
         View f = getCurrentFocus();
 
         if (pairPanel.getVisibility() == View.VISIBLE) {
-            if (k == KeyEvent.KEYCODE_BACK || k == KeyEvent.KEYCODE_DPAD_CENTER || k == KeyEvent.KEYCODE_ENTER) closePair();
+            if (k == KeyEvent.KEYCODE_BACK || k == KeyEvent.KEYCODE_DPAD_CENTER || k == KeyEvent.KEYCODE_ENTER) {
+                autoPairDismissed = true;
+                closePair();
+            }
             return true;
         }
 
@@ -710,6 +719,16 @@ public class MainActivity extends Activity {
 
         pairPanel.addView(card, new FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER));
         return pairPanel;
+    }
+
+    /**
+     * Sin ningún celular vinculado la TV muestra el código sola: así se puede estrenar el control
+     * (o recuperarlo tras revocar todos) aunque no haya control físico, solo el botón de encendido.
+     */
+    private void autoPair() {
+        if (!resumed || autoPairDismissed || pairPanel.getVisibility() == View.VISIBLE) return;
+        if (remote.pairedCount() > 0 || remote.address() == null) return;
+        openPair();
     }
 
     private void openPair() {
